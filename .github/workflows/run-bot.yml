@@ -1,0 +1,42 @@
+name: Discord Werewolf Bot Runner (Keep Alive)
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+  
+  # 🕒 6時間ごとに自動で新しい起動枠を立ち上げ、Botを途切れさせない設定
+  schedule:
+    # 6時間ごとに新しいジョブを予約し、前のジョブが消える前に上書き起動させます
+    - cron: '0 */6 * * *'
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    
+    # 前のジョブが残っている場合は、自動で新しい方に切り替える（多重起動の防止）
+    concurrency:
+      group: werewolf-bot-group
+      cancel-in-progress: true
+
+    steps:
+    - name: コードのチェックアウト
+      uses: actions/checkout@v4
+
+    - name: Pythonのセットアップ
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: 依存ライブラリのインストール
+      run: |
+        python -m pip install --upgrade pip
+        pip install discord.py
+
+    - name: Discord Botの永続起動
+      env:
+        # ★【修正】GitHubのSecretsから「DISCORD_BOT_TOKEN」を読み込むように設定しました
+        DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+      run: |
+        echo "Botを24時間永続モードで起動します。"
+        python main.py
