@@ -19,29 +19,71 @@ class TimeSettingModal(discord.ui.Modal, title='ゲーム時間の設定'):
         except ValueError:
             await interaction.response.send_message("エラー: 半角数字で入力してください。", ephemeral=True)
 
-# ─── 役職個別枚数変更セレクトメニュー ───
+# ─── 【修正】新しいステップ式・役職設定画面 ───
+
+# ステップ2: 枚数を選ぶドロップダウン
 class RoleCountSelect(discord.ui.Select):
-    def __init__(self, role_name):
-        self.role_name = role_name
-        current = game.role_settings[role_name]
+    def __init__(self, selected_role):
+        self.selected_role = selected_role
+        current = game.role_settings[selected_role]
         options = [
             discord.SelectOption(label="0枚", value="0", default=(current == 0)),
             discord.SelectOption(label="1枚", value="1", default=(current == 1)),
             discord.SelectOption(label="2枚", value="2", default=(current == 2)),
             discord.SelectOption(label="3枚", value="3", default=(current == 3)),
         ]
-        super().__init__(placeholder=f"{role_name} の枚数を選択 (現在: {current}枚)", options=options)
+        super().__init__(placeholder=f"【{selected_role}】の枚数を選択（現在: {current}枚）", options=options)
 
     async def callback(self, interaction: discord.Interaction):
         count = int(self.values[0])
-        game.role_settings[self.role_name] = count
-        await interaction.response.send_message(f"👥 【{self.role_name}】を {count} 枚に設定しました。", ephemeral=True)
+        game.role_settings[self.selected_role] = count
+        
+        # 枚数を変更した後、最新の情報を反映して「ステップ1（役職選択画面）」に戻す
+        current_status = "\n".join([f"・{k}: {v}枚" for k, v in game.role_settings.items() if v > 0])
+        await interaction.response.edit_message(
+            content=f"👥 【{self.selected_role}】を {count} 枚に設定しました。\n\n現在の役職セット内訳:\n{current_status}\n\n続けて変更する場合は対象の役職を選んでください：",
+            view=RoleSettingView() # 最初のメニューに戻る
+        )
 
+# ステップ1: どの役職を変更するか選ぶドロップダウン
+class RoleSelectMenu(discord.ui.Select):
+    def __init__(self):
+        # 登録されている全ての役職を1つのドロップダウンに詰め込みます（これで最大5行の制限を回避）
+        options = [
+            discord.SelectOption(label=f"{role_name} ({game.role_settings[role_name]}枚)", value=role_name)
+            for role_name in game.role_settings.keys()
+        ]
+        super().__init__(placeholder="枚数を変更したい役職を選択してください...", options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        selected_role = self.values[0]
+        
+        # 選ばれた役職用の「枚数選択ドロップダウン」を生成して画面を更新
+        count_view = discord.ui.View(timeout=60)
+        count_view.add_item(RoleCountSelect(selected_role))
+        
+        # 「戻る」ボタンも設置して、何も変更せずに戻れるように配慮
+        back_button = discord.ui.Button(label="🔙 役職選択に戻る", style=discord.ButtonStyle.secondary)
+        async def back_callback(inter):
+            current_status = "\n".join([f"・{k}: {v}枚" for k, v in game.role_settings.items() if v > 0])
+            await inter.response.edit_message(
+                content=f"現在の役職セット内訳:\n{current_status}\n\n変更したい役職の枚数を選択してください：",
+                view=RoleSettingView()
+            )
+        back_button.callback = back_callback
+        count_view.add_item(back_button)
+
+        await interaction.response.edit_message(
+            content=f"⚙️ **役職枚数設定: 【{selected_role}】**\n何枚セットするか選択してください。",
+            view=count_view
+        )
+
+# 役職設定のベースとなるView
 class RoleSettingView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=60)
-        for role_name in game.role_settings.keys():
-            self.add_item(RoleCountSelect(role_name))
+        self.add_item(RoleSelectMenu()) # 1つのドロップダウンだけをセット
+
 
 # ─── 募集・全体設定パネル ───
 class RecruitView(discord.ui.View):
