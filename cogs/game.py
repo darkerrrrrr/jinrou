@@ -244,6 +244,7 @@ class GameCog(commands.Cog):
             game.thief_action_done = True
             day_count += 1
 
+    # 🛠️ 【修正完了】文字での送信から、きれいなEmbed送信にアップデート！
     @commands.command()
     async def recruit(self, ctx):
         if game.is_playing:
@@ -251,7 +252,11 @@ class GameCog(commands.Cog):
         game.players = []
         game.roles.clear()
         game.log_channel = ctx.channel
-        await ctx.send("🐺 人狼ゲームの参加者を募集します。ボタンを押して参加してください。", view=RecruitView())
+        
+        # views.py の新しい RecruitView と Embed 生成機能を呼び出す
+        view = RecruitView()
+        embed = view.create_recruit_embed()
+        await ctx.send(embed=embed, view=view)
 
     @commands.command()
     async def start_game(self, ctx):
