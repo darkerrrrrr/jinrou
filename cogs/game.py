@@ -28,6 +28,7 @@ class GameCog(commands.Cog):
             delattr(game, 'game_category')
             game.log_channel = None
             game.dead_channel = None
+            game.wolf_channel = None # 削除対象に追加しました
 
     async def mute_all_alive(self, mute_status: bool, reason: str):
         for member in game.alive_players:
@@ -60,8 +61,6 @@ class GameCog(commands.Cog):
     async def run_game_loop(self):
         day_count = 0
         while game.is_playing:
-            # [朝フェーズ・投票・夜のロジックはあなたの元コードから引き継いでいます]
-            # ※勝利判定の後に以下の自動掃除を実行します
             winner = game.check_victory()
             if winner:
                 await self.mute_all_alive(False, "終了")
@@ -77,13 +76,15 @@ class GameCog(commands.Cog):
     async def start_game(self, ctx):
         if len(game.players) < 3: return await ctx.send("3人以上で開始してください。")
 
-        # 1. チャンネル環境構築（自動）
+        # 1. チャンネル環境構築
         guild = ctx.guild
         category = await guild.create_category("🐺 人狼ゲーム")
         game.game_category = category
         game.log_channel = await guild.create_text_channel("進行ログ", category=category)
         await guild.create_voice_channel("議論用ボイス", category=category)
         await guild.create_voice_channel("霊界ボイス", category=category)
+        
+        # 霊界チャットの生成
         game.dead_channel = await guild.create_text_channel(
             "霊界チャット", category=category, 
             overwrites={guild.default_role: discord.PermissionOverwrite(read_messages=False)}
@@ -93,6 +94,22 @@ class GameCog(commands.Cog):
         game.is_playing = True
         game.alive_players = game.players.copy()
         # [あなたの役職配布ロジックをここに記載]
+
+        # 3. 人狼専用の密談部屋（マスターも閲覧不可）
+        wolves = [p for p, role in game.roles.items() if role.name == "人狼"]
+        
+        wolf_overwrites = {
+            guild.default_role: discord.PermissionOverwrite(read_messages=False),
+            guild.me: discord.PermissionOverwrite(read_messages=True)
+        }
+        for member in wolves:
+            wolf_overwrites[member] = discord.PermissionOverwrite(read_messages=True)
+            
+        game.wolf_channel = await guild.create_text_channel(
+            "人狼の密談部屋", 
+            category=category,
+            overwrites=wolf_overwrites
+        )
         
         await game.log_channel.send("ゲーム環境を準備しました！")
         self.bot.loop.create_task(self.run_game_loop())
