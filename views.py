@@ -82,7 +82,7 @@ class RoleSettingView(discord.ui.View):
         self.add_item(RoleSelectMenu())
 
 
-# ─── 募集・全体設定パネル（★Embed完全対応版） ───
+# ─── 募集・全体設定パネル ───
 class RecruitView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -106,7 +106,9 @@ class RecruitView(discord.ui.View):
         embed.add_field(name="⏱️ 制限時間設定", value=f"・議論時間: {game.discussion_time}秒\n・夜の行動: {game.night_time}秒\n・朝の発表: {game.morning_time}秒", inline=True)
         embed.add_field(name="👥 配役構成", value=roles_text, inline=True)
         embed.add_field(name=f"🎮 参加プレイヤー一覧 (現在 {len(game.players)}人)", value=players_text, inline=False)
-        embed.set_footer(text="Game Management System • 24時間稼働モード")
+        
+        # ⚙️ 【修正箇所】「24時間稼働モード」を削除し、システム名のみにスッキリさせました
+        embed.set_footer(text="Game Management System")
         return embed
 
     @discord.ui.button(label="参加", style=discord.ButtonStyle.green, custom_id="join_btn")
