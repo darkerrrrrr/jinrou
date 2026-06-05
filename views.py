@@ -4,7 +4,7 @@ from config import game
 
 # ─── 時間設定モーダル ───
 class TimeSettingModal(discord.ui.Modal, title='ゲーム時間の設定'):
-    discussion_input = discord.ui.TextInput(label='議論の時間 (秒)', default='180', max_length=4)
+    discussion_input = discord.ui.TextInput(label='昼の議論時間 (秒)', default='180', max_length=4)
     night_input = discord.ui.TextInput(label='夜の行動時間 (秒)', default='60', max_length=4)
     morning_input = discord.ui.TextInput(label='朝の結果発表時間 (秒)', default='15', max_length=4)
 
@@ -103,18 +103,17 @@ class RecruitView(discord.ui.View):
             description="下のボタンを押して参加・設定を行ってください。\n全員揃ったらゲームを開始します。",
             color=discord.Color.dark_red()
         )
-        embed.add_field(name="⏱️ 制限時間設定", value=f"・議論時間: {game.discussion_time}秒\n・夜の行動: {game.night_time}秒\n・朝の発表: {game.morning_time}秒", inline=True)
+        embed.add_field(name="⏱️ 制限時間設定", value=f"・昼の議論: {game.discussion_time}秒\n・夜の行動: {game.night_time}秒\n・朝の発表: {game.morning_time}秒", inline=True)
         embed.add_field(name="👥 配役構成", value=roles_text, inline=True)
         embed.add_field(name=f"🎮 参加プレイヤー一覧 (現在 {len(game.players)}人)", value=players_text, inline=False)
         
-        # ❌ フッター設定を完全に削除しました
+        # ❌ フッター設定を完全に削除しました（余計なテキストは出ません）
         return embed
 
     @discord.ui.button(label="参加", style=discord.ButtonStyle.green, custom_id="join_btn")
     async def join(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user not in game.players:
             game.players.append(interaction.user)
-            # 参加者が増えたのでEmbedを更新
             await interaction.response.edit_message(embed=self.create_recruit_embed(), view=self)
         else:
             await interaction.response.send_message("既に参加しています。", ephemeral=True)
@@ -123,14 +122,12 @@ class RecruitView(discord.ui.View):
     async def leave(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user in game.players:
             game.players.remove(interaction.user)
-            # 辞退者が出たのでEmbedを更新
             await interaction.response.edit_message(embed=self.create_recruit_embed(), view=self)
         else:
             await interaction.response.send_message("参加していません。", ephemeral=True)
 
     @discord.ui.button(label="⏱️ 時間設定", style=discord.ButtonStyle.secondary, custom_id="settings_btn")
     async def settings(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # 自分自身（RecruitView）をモーダルに渡して、時間変更後にEmbedを上書きできるようにする
         await interaction.response.send_modal(TimeSettingModal(parent_view=self))
 
     @discord.ui.button(label="👥 役職設定", style=discord.ButtonStyle.primary, custom_id="roles_btn")
