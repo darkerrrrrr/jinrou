@@ -107,8 +107,7 @@ class RecruitView(discord.ui.View):
         embed.add_field(name="👥 配役構成", value=roles_text, inline=True)
         embed.add_field(name=f"🎮 参加プレイヤー一覧 (現在 {len(game.players)}人)", value=players_text, inline=False)
         
-        # ⚙️ 【修正箇所】「24時間稼働モード」を削除し、システム名のみにスッキリさせました
-        embed.set_footer(text="Game Management System")
+        # ❌ フッター設定を完全に削除しました
         return embed
 
     @discord.ui.button(label="参加", style=discord.ButtonStyle.green, custom_id="join_btn")
