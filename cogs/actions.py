@@ -1,4 +1,8 @@
-import discord, sys, os
+import discord
+import sys
+import os
+
+# ルートをパスに追加
 sys.path.append(os.getcwd())
 from config import game
 
