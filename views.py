@@ -25,16 +25,15 @@ class RoleCountSelect(discord.ui.Select):
     def __init__(self, selected_role):
         self.selected_role = selected_role
         current = game.role_settings[selected_role]
-        # 第三陣営と怪盗は 0~1 のみに制限
-        if selected_role in ["シリアルキラー", "怪盗"]:
-            options = [discord.SelectOption(label=f"{i}枚", value=str(i), default=(current == i)) for i in range(2)]
-        else:
-            options = [discord.SelectOption(label=f"{i}枚", value=str(i), default=(current == i)) for i in range(4)]
+        # 【修正】制限する役職リストを拡大
+        limited = ["シリアルキラー", "怪盗", "占い師", "狩人", "狂人", "霊媒師"]
+        limit = 2 if selected_role in limited else 4
+        options = [discord.SelectOption(label=f"{i}枚", value=str(i), default=(current == i)) for i in range(limit)]
         super().__init__(placeholder=f"【{selected_role}】の枚数を選択", options=options)
 
     async def callback(self, interaction: discord.Interaction):
         game.role_settings[self.selected_role] = int(self.values[0])
-        await interaction.response.edit_message(content="役職設定を更新しました。", view=RoleSettingView())
+        await interaction.response.edit_message(content="役職設定を更新しました。続けて設定できます。", view=RoleSettingView())
 
 class RoleSelectMenu(discord.ui.Select):
     def __init__(self):
@@ -45,10 +44,17 @@ class RoleSelectMenu(discord.ui.Select):
         v.add_item(RoleCountSelect(self.values[0]))
         await interaction.response.edit_message(content=f"【{self.values[0]}】の枚数を選択:", view=v)
 
+# ─── 【修正】完了ボタンを追加 ───
 class RoleSettingView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=60)
         self.add_item(RoleSelectMenu())
+        
+        close_btn = discord.ui.Button(label="完了（募集画面に戻る）", style=discord.ButtonStyle.secondary)
+        async def close_callback(interaction):
+            await interaction.response.edit_message(embed=RecruitView().create_recruit_embed(), view=RecruitView())
+        close_btn.callback = close_callback
+        self.add_item(close_btn)
 
 # ─── 募集・全体設定パネル ───
 class RecruitView(discord.ui.View):
@@ -57,7 +63,7 @@ class RecruitView(discord.ui.View):
     def create_recruit_embed(self):
         roles_text = "\n".join([f"・{k}: {v}枚" for k, v in game.role_settings.items() if v > 0])
         embed = discord.Embed(title="🐺 人狼ゲーム 参加者募集中！", color=discord.Color.dark_red())
-        embed.add_field(name="👥 配役構成", value=roles_text)
+        embed.add_field(name="👥 配役構成", value=roles_text if roles_text else "未設定")
         embed.add_field(name=f"🎮 参加者 ({len(game.players)}人)", value="\n".join([p.mention for p in game.players]) if game.players else "誰も参加していません。")
         return embed
 
