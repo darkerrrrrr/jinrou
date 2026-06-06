@@ -16,6 +16,9 @@ class TimeSettingModal(discord.ui.Modal, title='ゲーム時間の設定'):
             game.discussion_time = int(self.discussion_input.value)
             game.night_time = int(self.night_input.value)
             game.morning_time = int(self.morning_input.value)
+            # パネル更新
+            if game.recruit_message:
+                await game.recruit_message.edit(embed=self.parent_view.create_recruit_embed(), view=self.parent_view)
             await interaction.response.edit_message(embed=self.parent_view.create_recruit_embed(), view=self.parent_view)
         except ValueError:
             await interaction.response.send_message("半角数字で入力してください。", ephemeral=True)
@@ -25,7 +28,6 @@ class RoleCountSelect(discord.ui.Select):
     def __init__(self, selected_role):
         self.selected_role = selected_role
         current = game.role_settings[selected_role]
-        # 【修正】制限する役職リストを拡大
         limited = ["シリアルキラー", "怪盗", "占い師", "狩人", "狂人", "霊媒師"]
         limit = 2 if selected_role in limited else 4
         options = [discord.SelectOption(label=f"{i}枚", value=str(i), default=(current == i)) for i in range(limit)]
@@ -33,6 +35,11 @@ class RoleCountSelect(discord.ui.Select):
 
     async def callback(self, interaction: discord.Interaction):
         game.role_settings[self.selected_role] = int(self.values[0])
+        
+        # 元の募集パネルを即座に更新
+        if game.recruit_message:
+            await game.recruit_message.edit(embed=RecruitView().create_recruit_embed(), view=RecruitView())
+        
         await interaction.response.edit_message(content="役職設定を更新しました。続けて設定できます。", view=RoleSettingView())
 
 class RoleSelectMenu(discord.ui.Select):
@@ -44,12 +51,10 @@ class RoleSelectMenu(discord.ui.Select):
         v.add_item(RoleCountSelect(self.values[0]))
         await interaction.response.edit_message(content=f"【{self.values[0]}】の枚数を選択:", view=v)
 
-# ─── 【修正】完了ボタンを追加 ───
 class RoleSettingView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=60)
         self.add_item(RoleSelectMenu())
-        
         close_btn = discord.ui.Button(label="完了（募集画面に戻る）", style=discord.ButtonStyle.secondary)
         async def close_callback(interaction):
             await interaction.response.edit_message(embed=RecruitView().create_recruit_embed(), view=RecruitView())
