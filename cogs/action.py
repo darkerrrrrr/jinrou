@@ -1,4 +1,5 @@
-import discord
+import discord, sys, os
+sys.path.append(os.getcwd())
 from config import game
 
 class ActionSelect(discord.ui.Select):
