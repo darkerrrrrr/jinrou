@@ -1,8 +1,12 @@
-import discord, random, asyncio
+import discord, random, asyncio, sys, os
 from discord.ext import commands
+
+# 実行ディレクトリをパスに追加し、ルートのモジュールを読み込めるようにする
+sys.path.append(os.getcwd())
+
 from config import game
 from views import RecruitView
-from actions import ActionView
+from actions import ActionView  # ルートにある actions.py をこれで読み込めます
 from roles.werewolf import Werewolf
 from roles.seer import Seer
 from roles.medium import Medium
@@ -45,7 +49,6 @@ class GameCog(commands.Cog):
         await self.process_night_results(channel)
 
     async def process_night_results(self, channel):
-        # 簡易的な集計ロジック
         dead_list = [data['target'] for actor, data in game.actions.items() if data['action'] == "襲撃"]
         if dead_list:
             for p in dead_list:
