@@ -1,3 +1,6 @@
+import discord
+from config import game
+
 # ─── 募集・全体設定パネル ───
 class RecruitView(discord.ui.View):
     def __init__(self): super().__init__(timeout=None)
