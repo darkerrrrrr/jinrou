@@ -16,10 +16,13 @@ class TimeSettingModal(discord.ui.Modal, title='ゲーム時間の設定'):
             game.discussion_time = int(self.discussion_input.value)
             game.night_time = int(self.night_input.value)
             game.morning_time = int(self.morning_input.value)
-            # パネル更新
+            
+            # メインの募集パネルを更新
             if game.recruit_message:
                 await game.recruit_message.edit(embed=self.parent_view.create_recruit_embed(), view=self.parent_view)
-            await interaction.response.edit_message(embed=self.parent_view.create_recruit_embed(), view=self.parent_view)
+            
+            # 設定メニューは閉じるか、更新メッセージを表示
+            await interaction.response.send_message("時間を更新しました。", ephemeral=True)
         except ValueError:
             await interaction.response.send_message("半角数字で入力してください。", ephemeral=True)
 
@@ -36,11 +39,12 @@ class RoleCountSelect(discord.ui.Select):
     async def callback(self, interaction: discord.Interaction):
         game.role_settings[self.selected_role] = int(self.values[0])
         
-        # 元の募集パネルを即座に更新
+        # 1. メインの募集パネルを更新（viewを再生成してリセット）
         if game.recruit_message:
             await game.recruit_message.edit(embed=RecruitView().create_recruit_embed(), view=RecruitView())
         
-        await interaction.response.edit_message(content="役職設定を更新しました。続けて設定できます。", view=RoleSettingView())
+        # 2. 設定メニュー（ephemeral）を更新
+        await interaction.response.edit_message(content=f"【{self.selected_role}】を{self.values[0]}枚に設定しました。続けて設定できます。", view=RoleSettingView())
 
 class RoleSelectMenu(discord.ui.Select):
     def __init__(self):
@@ -55,9 +59,10 @@ class RoleSettingView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=60)
         self.add_item(RoleSelectMenu())
-        close_btn = discord.ui.Button(label="完了（募集画面に戻る）", style=discord.ButtonStyle.secondary)
+        close_btn = discord.ui.Button(label="設定完了", style=discord.ButtonStyle.secondary)
         async def close_callback(interaction):
-            await interaction.response.edit_message(embed=RecruitView().create_recruit_embed(), view=RecruitView())
+            # 設定画面を削除（非表示に）する
+            await interaction.response.edit_message(content="設定を完了しました。", view=None)
         close_btn.callback = close_callback
         self.add_item(close_btn)
 
