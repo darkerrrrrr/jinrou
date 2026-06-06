@@ -20,8 +20,8 @@ class WerewolfGame:
         self.last_executed = None
         self.last_executed_role_name = None
         self.thief_action_done = False
-        # 追加：募集メッセージを記憶する
         self.recruit_message = None
+        self.host = None  # 主催者を保持
 
     def check_victory(self):
         if not self.alive_players: return None
