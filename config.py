@@ -9,6 +9,8 @@ class WerewolfGame:
         self.log_channel = None      
         self.dead_channel = None     
         self.wolf_channel = None     
+        self.alive_vc = None         
+        self.dead_vc = None          
         self.discussion_time = 180
         self.night_time = 60
         self.morning_time = 15
@@ -21,7 +23,7 @@ class WerewolfGame:
         self.last_executed_role_name = None
         self.thief_action_done = False
         self.recruit_message = None
-        self.host = None  # 主催者を保持
+        self.host = None
 
     def check_victory(self):
         if not self.alive_players: return None

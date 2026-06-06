@@ -1,15 +1,12 @@
 import discord
 from config import game
 
-# ─── 募集・全体設定パネル ───
 class RecruitView(discord.ui.View):
     def __init__(self): 
-        # timeout=None にすることで、このパネルはずっと反応し続けます
         super().__init__(timeout=None)
 
     def create_recruit_embed(self):
         roles_text = "\n".join([f"・{k}: {v}枚" for k, v in game.role_settings.items() if v > 0])
-        # タイトルをシンプルに変更
         embed = discord.Embed(title="🐺 人狼ゲーム", color=discord.Color.dark_red())
         embed.add_field(name="👥 配役構成", value=roles_text if roles_text else "未設定")
         embed.add_field(name=f"🎮 参加者 ({len(game.players)}人)", value="\n".join([p.mention for p in game.players]) if game.players else "誰も参加していません。")
@@ -45,7 +42,6 @@ class RecruitView(discord.ui.View):
         cog = interaction.client.get_cog("GameCog")
         if cog: await cog.execute_game_start(interaction.channel)
 
-# ─── 時間設定モーダル ───
 class TimeSettingModal(discord.ui.Modal, title='ゲーム時間の設定'):
     discussion_input = discord.ui.TextInput(label='昼の議論時間 (秒)', default='180', max_length=4)
     night_input = discord.ui.TextInput(label='夜の行動時間 (秒)', default='60', max_length=4)
@@ -60,7 +56,6 @@ class TimeSettingModal(discord.ui.Modal, title='ゲーム時間の設定'):
         if game.recruit_message: await game.recruit_message.edit(embed=self.parent_view.create_recruit_embed(), view=self.parent_view)
         await interaction.response.send_message("更新しました。", ephemeral=True)
 
-# ─── 役職設定 ───
 class RoleCountSelect(discord.ui.Select):
     def __init__(self, selected_role):
         self.selected_role = selected_role
