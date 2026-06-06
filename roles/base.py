@@ -1,5 +1,9 @@
-import discord
 class BaseRole:
-    def __init__(self, player=None): self.player = player
-    name, team, has_night_action = "平民", "村人", False
-    async def send_night_menu(self, alive_players): pass
+    def __init__(self, player=None): 
+        self.player = player
+    name = "平民"
+    team = "村人"
+    
+    # どのアクションをするか。デフォルトは「なし」
+    def get_action_label(self):
+        return None
