@@ -17,7 +17,8 @@ class GameCog(commands.Cog):
     @commands.command()
     async def setup(self, ctx):
         view = RecruitView()
-        await ctx.send(embed=view.create_recruit_embed(), view=view)
+        # 募集メッセージを記憶して送信
+        game.recruit_message = await ctx.send(embed=view.create_recruit_embed(), view=view)
 
     @commands.command()
     async def start_game(self, ctx):
