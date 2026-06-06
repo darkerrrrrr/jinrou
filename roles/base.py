@@ -3,6 +3,4 @@ class BaseRole:
         self.player = player
     name = "平民"
     team = "村人"
-    
-    def get_action_label(self):
-        return None
+    def get_action_label(self): return None
