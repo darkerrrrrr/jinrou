@@ -1,3 +1,4 @@
 from roles.base import BaseRole
 class Thief(BaseRole):
-    name, team, has_night_action = "怪盗", "村人", True
+    name, team = "怪盗", "村人"
+    def get_action_label(self): return "盗む"
