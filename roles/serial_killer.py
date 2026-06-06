@@ -1,3 +1,4 @@
 from roles.base import BaseRole
 class SerialKiller(BaseRole):
-    name, team, has_night_action = "シリアルキラー", "第三陣営", True
+    name, team = "シリアルキラー", "第三陣営"
+    def get_action_label(self): return "殺害"
