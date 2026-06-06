@@ -3,12 +3,12 @@ import discord
 class WerewolfGame:
     def __init__(self):
         self.is_playing = False
-        self.players = []            # 参加者のMemberオブジェクトリスト
-        self.roles = {}              # {Member: 各役職クラスのインスタンス}
-        self.alive_players = []      # 生存者リスト
-        self.log_channel = None      # 進行ログ用テキストチャンネル
-        self.dead_channel = None     # 霊界チャット用テキストチャンネル
-        self.wolf_channel = None     # 人狼チャット用チャンネル
+        self.players = []            
+        self.roles = {}              
+        self.alive_players = []      
+        self.log_channel = None      
+        self.dead_channel = None     
+        self.wolf_channel = None     
         
         self.discussion_time = 180
         self.night_time = 60
