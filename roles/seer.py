@@ -1,3 +1,4 @@
 from roles.base import BaseRole
 class Seer(BaseRole):
-    name, team, has_night_action = "占い師", "村人", True
+    name, team = "占い師", "村人"
+    def get_action_label(self): return "占い"
