@@ -18,14 +18,18 @@ class TimeSettingModal(discord.ui.Modal, title='ゲーム時間の設定'):
             game.morning_time = int(self.morning_input.value)
             await interaction.response.edit_message(embed=self.parent_view.create_recruit_embed(), view=self.parent_view)
         except ValueError:
-            await interaction.response.send_message("エラー: 半角数字で入力してください。", ephemeral=True)
+            await interaction.response.send_message("半角数字で入力してください。", ephemeral=True)
 
 # ─── 役職設定関連 ───
 class RoleCountSelect(discord.ui.Select):
     def __init__(self, selected_role):
         self.selected_role = selected_role
         current = game.role_settings[selected_role]
-        options = [discord.SelectOption(label=f"{i}枚", value=str(i), default=(current == i)) for i in range(4)]
+        # 第三陣営と怪盗は 0~1 のみに制限
+        if selected_role in ["シリアルキラー", "怪盗"]:
+            options = [discord.SelectOption(label=f"{i}枚", value=str(i), default=(current == i)) for i in range(2)]
+        else:
+            options = [discord.SelectOption(label=f"{i}枚", value=str(i), default=(current == i)) for i in range(4)]
         super().__init__(placeholder=f"【{selected_role}】の枚数を選択", options=options)
 
     async def callback(self, interaction: discord.Interaction):
@@ -49,17 +53,24 @@ class RoleSettingView(discord.ui.View):
 # ─── 募集・全体設定パネル ───
 class RecruitView(discord.ui.View):
     def __init__(self): super().__init__(timeout=None)
+
     def create_recruit_embed(self):
         roles_text = "\n".join([f"・{k}: {v}枚" for k, v in game.role_settings.items() if v > 0])
         embed = discord.Embed(title="🐺 人狼ゲーム 参加者募集中！", color=discord.Color.dark_red())
         embed.add_field(name="👥 配役構成", value=roles_text)
-        embed.add_field(name="🎮 参加者", value=f"{len(game.players)}人")
+        embed.add_field(name=f"🎮 参加者 ({len(game.players)}人)", value="\n".join([p.mention for p in game.players]) if game.players else "誰も参加していません。")
         return embed
 
     @discord.ui.button(label="参加", style=discord.ButtonStyle.green, custom_id="join_btn")
     async def join(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user not in game.players:
             game.players.append(interaction.user)
+            await interaction.response.edit_message(embed=self.create_recruit_embed(), view=self)
+
+    @discord.ui.button(label="辞退", style=discord.ButtonStyle.red, custom_id="leave_btn")
+    async def leave(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user in game.players:
+            game.players.remove(interaction.user)
             await interaction.response.edit_message(embed=self.create_recruit_embed(), view=self)
 
     @discord.ui.button(label="⏱️ 時間設定", style=discord.ButtonStyle.secondary, custom_id="settings_btn")
@@ -69,14 +80,3 @@ class RecruitView(discord.ui.View):
     @discord.ui.button(label="👥 役職設定", style=discord.ButtonStyle.primary, custom_id="roles_btn")
     async def role_settings(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_message("役職変更:", view=RoleSettingView(), ephemeral=True)
-
-# ─── アクション用 ───
-class RoleActionView(discord.ui.View):
-    def __init__(self, actor, targets, placeholder="対象を選択", action_type="default"):
-        super().__init__(timeout=60)
-        self.add_item(discord.ui.Select(placeholder=placeholder, options=[discord.SelectOption(label=p.display_name, value=str(p.id)) for p in targets]))
-
-class ThiefView(discord.ui.View):
-    def __init__(self, targets):
-        super().__init__(timeout=60)
-        self.add_item(discord.ui.Select(placeholder="盗む相手を選択", options=[discord.SelectOption(label=p.display_name, value=str(p.id)) for p in targets]))
