@@ -6,7 +6,7 @@ class ActionView(discord.ui.View):
         super().__init__(timeout=60)
         options = [discord.SelectOption(label=p.display_name, value=str(p.id)) 
                    for p in game.alive_players if p != actor]
-        select = discord.ui.Select(placeholder=f"{action_label}対象を選択...", options=options)
+        select = discord.ui.Select(placeholder=f"{action_label}先を選択...", options=options)
         
         async def callback(interaction):
             target = next((p for p in game.alive_players if p.id == int(select.values[0])), None)
