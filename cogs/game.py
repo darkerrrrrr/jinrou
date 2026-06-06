@@ -1,12 +1,13 @@
 import discord, random, asyncio, sys, os
 from discord.ext import commands
 
-# 実行ディレクトリをパスに追加し、ルートのモジュールを読み込めるようにする
 sys.path.append(os.getcwd())
 
 from config import game
 from views import RecruitView
-from actions import ActionView  # ルートにある actions.py をこれで読み込めます
+from actions import ActionView
+import channels
+
 from roles.werewolf import Werewolf
 from roles.seer import Seer
 from roles.medium import Medium
@@ -32,14 +33,33 @@ class GameCog(commands.Cog):
         random.shuffle(deck)
         game.roles = {p: deck[i] for i, p in enumerate(game.players)}
         for p, role in game.roles.items(): role.player = p
+        
+        await channels.create_game_channels(channel.guild)
+        await channels.setup_wolf_permissions()
+        
         game.is_playing = True
         game.alive_players = game.players.copy()
-        await channel.send("ゲームを開始しました。")
+        
+        start_message = (
+            f"ゲームを開始しました。\n"
+            f"【テキスト】\n"
+            f"・人狼用: {game.wolf_channel.mention}\n"
+            f"・ログ用: {game.log_channel.mention}\n\n"
+            f"【ボイス】\n"
+            f"・生存者用: {game.alive_vc.mention}\n"
+            f"・墓場用: {game.dead_vc.mention}\n"
+            f"※プレイヤーは生存者ボイスチャンネルに移動してください。"
+        )
+        await channel.send(start_message)
+        await game.log_channel.send("─── ゲームログの記録を開始しました ───")
+        
         await self.start_night(channel)
 
     async def start_night(self, channel):
         game.actions = {}
         await channel.send("夜が訪れました。各役職者はDMを確認してください。")
+        await game.log_channel.send("🌙 夜フェーズに移行しました。")
+        
         for player, role in game.roles.items():
             if player not in game.alive_players: continue
             label = role.get_action_label()
@@ -50,12 +70,20 @@ class GameCog(commands.Cog):
 
     async def process_night_results(self, channel):
         dead_list = [data['target'] for actor, data in game.actions.items() if data['action'] == "襲撃"]
+        await game.log_channel.send("☀️ 朝フェーズになり、夜の結果を処理しています。")
+        
         if dead_list:
             for p in dead_list:
                 if p in game.alive_players: game.alive_players.remove(p)
-            await channel.send("昨夜の犠牲者: " + ", ".join([p.display_name for p in dead_list]))
+                await channels.handle_player_death_vc(p)
+            
+            result_str = "昨夜の犠牲者: " + ", ".join([p.display_name for p in dead_list])
+            await channel.send(result_str)
+            await game.log_channel.send(f"❌ 犠牲者: {result_str}")
         else:
-            await channel.send("昨夜は誰も犠牲になりませんでした。")
+            msg = "昨夜は誰も犠牲になりませんでした。"
+            await channel.send(msg)
+            await game.log_channel.send(f"🛡️ {msg}")
         game.actions = {}
 
 async def setup(bot): await bot.add_cog(GameCog(bot))
