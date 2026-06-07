@@ -11,6 +11,10 @@ class WerewolfGame:
         self.wolf_channel = None     
         self.alive_vc = None         
         self.dead_vc = None          
+        
+        # 👇 【追加】アイテム（拡声器）の通知などを流すメインテキストチャンネルを記憶する変数
+        self.text_channel = None
+
         self.discussion_time = 180
         self.night_time = 60
         self.morning_time = 15
