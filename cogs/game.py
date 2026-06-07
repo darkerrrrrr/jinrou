@@ -106,7 +106,7 @@ class GameCog(commands.Cog):
                 except:
                     pass
             elif role.name == "村人":
-                # 【新ギミック】普通の村人のみにアイテム支給ガチャボタンを送信！
+                # 普通の村人のみにアイテム支給ガチャボタンを送信
                 try:
                     await player.send("🎒 **【夜間の身支度】** 明日の過酷な議論に備え、手荷物を確認しましょう。下のボタンからアイテムを1つ獲得できます。", view=ItemDrawView())
                 except:
@@ -165,7 +165,7 @@ class GameCog(commands.Cog):
                 await game.log_channel.send(f"🛡️ 狩人の護衛成功！ {target.display_name} への襲撃が阻止されました。")
             else:
                 if target in game.alive_players:
-                    # 💡 【アイテム効果】「🛡️ お守り」を持っていれば、身代わりにして襲撃を耐える
+                    # 【アイテム効果】お守りを持っていれば、身代わりにして襲撃を耐える
                     if get_player_item(target.id) == "🛡️ お守り":
                         await game.log_channel.send(f"✨ {target.display_name} は懐の「お守り」が身代わりとなり、人狼の襲撃を耐え抜いた！")
                         use_player_item(target.id) 
@@ -188,7 +188,7 @@ class GameCog(commands.Cog):
             await channel.send(f"❌ {result_str}")
             await game.log_channel.send(f"❌ 犠牲者: {result_str}")
             
-            # 💡 【アイテム効果】死んだ人が「📝 遺言ノート」を持っていたら自動発動！
+            # 【アイテム効果】死んだ人が「遺言ノート」を持っていたら自動発動
             for p in dead_list:
                 if get_player_item(p.id) == "📝 遺言ノート":
                     await channel.send(f"📖 **{p.display_name}の遺言ノートが見つかりました：**\n*「私が死んだということは、人狼はあいつか……？ 村の皆、仇を取ってくれ……！」*")
@@ -205,11 +205,10 @@ class GameCog(commands.Cog):
         await self.start_discussion(channel)
 
     async def start_discussion(self, channel):
-        # 💡 【アイテム効果】「🤐 沈黙の御札」を貼られている人はミュートを解除しない
+        # 【アイテム効果】「沈黙の御札」を貼られている人はミュートを解除しない
         alive_listeners = []
         for p in game.alive_players:
             if p.id in silenced_players:
-                # 前日に呪い札を貼られたプレイヤーは昼の議論中喋れない（チャットもVCも制限）
                 try:
                     await p.edit(mute=True) # VCミュート維持
                 except: pass
@@ -228,7 +227,6 @@ class GameCog(commands.Cog):
         
         await asyncio.sleep(game.discussion_time)
         
-        # 議論終了時に全員一度ミュートし、呪いリストを次の日のためにクリア
         await channels.mute_all_alive_players(mute_status=True)
         silenced_players.clear() 
 
@@ -256,10 +254,10 @@ class GameCog(commands.Cog):
                 target_member = interaction.guild.get_member(target_id)
                 voted_users.add(interaction.user)
                 
-                # 💡 【アイテム効果】「🍯 泥団子」を持っていた場合、相手の投票権を奪う（自分の投票をせず相手を不参加にする）
+                # 【アイテム効果】「泥団子」を持っていた場合、相手の投票権を奪う
                 if get_player_item(interaction.user.id) == "🍯 泥団子":
                     use_player_item(interaction.user.id)
-                    voted_users.add(target_member) # 被害者を「投票済み(これ以上選べない)」扱いにする
+                    voted_users.add(target_member) 
                     await interaction.response.send_message(f"🍯 **【泥団子発動】** {interaction.user.display_name} さんが {target_member.display_name} さんに泥団子を投げつけ、今日の投票権を奪いました！")
                     await game.log_channel.send(f"🍯 {interaction.user.display_name} が {target_member.display_name} の投票権を剥奪しました。")
                     
@@ -267,14 +265,14 @@ class GameCog(commands.Cog):
                         self.view.stop()
                     return
 
-                # 💡 【アイテム効果】「🤐 沈黙の御札」を持っていた場合、投票と同時に相手に翌日の沈黙の呪いをかける
+                # 【アイテム効果】「沈黙の御札」を持っていた場合、相手に翌日の沈黙の呪いをかける
                 if get_player_item(interaction.user.id) == "🤐 沈黙の御札":
                     use_player_item(interaction.user.id)
                     silenced_players.add(target_id)
                     await interaction.response.send_message(f"🤐 **【沈黙の御札発動】** {interaction.user.display_name} さんが {target_member.display_name} さんに呪いの札を貼りました！明日彼は喋れません。")
                     await game.log_channel.send(f"🤐 {interaction.user.display_name} が {target_member.display_name} に翌日の沈黙呪いを付与しました。")
 
-                # 💡 【アイテム効果】「🧪 疑惑の劇薬」を持っていた場合、投票ポイントを「2票分」にする
+                # 【アイテム効果】「疑惑の劇薬」を持っていた場合、投票ポイントを「2票分」にする
                 vote_power = 1
                 if get_player_item(interaction.user.id) == "🧪 疑惑の劇薬":
                     vote_power = 2
@@ -305,30 +303,33 @@ class GameCog(commands.Cog):
             max_votes_count = max(votes.values())
             most_voted_ids = [pid for pid, v in votes.items() if v == max_votes_count]
             
+            # 🛠️ 【同票ランダム処刑の処理】
             if len(most_voted_ids) > 1:
-                await channel.send("⚖️ 投票の結果、最多得票者が同数で並んだため、本日の処刑は行われません。")
-                await game.log_channel.send(f"⚖️ 同票（得票数: {max_votes_count}）のため処刑なし。")
+                await channel.send("⚖️ 投票の結果、最多得票者が同数で並びました……！\n村の意見が割れたため、**運命のダイス（ランダム）**によって追放者が決定されます。")
+                most_voted_id = random.choice(most_voted_ids) 
+                await game.log_channel.send(f"🎲 同票（得票数: {max_votes_count}）のため、ランダム抽選を行いました。")
             else:
                 most_voted_id = most_voted_ids[0]
-                executed_user = channel.guild.get_member(most_voted_id)
-                if not executed_user:
-                    executed_user = await channel.guild.fetch_member(most_voted_id)
 
-                if executed_user and executed_user in game.alive_players:
-                    game.alive_players.remove(executed_user)
-                    game.last_executed = executed_user  
-                    await channel.send(f"⚖️ 投票の結果、本日は 【**{executed_user.display_name}**】 が村から追放されました。")
-                    await game.log_channel.send(f"⚖️ 処刑: {executed_user.display_name} (総得票ポイント: {votes[most_voted_id]})")
-                    await channels.handle_player_death_vc(executed_user)
-                    
-                    for p, role in game.roles.items():
-                        if p in game.alive_players and role.name == "霊媒師":
-                            ex_role = game.roles.get(executed_user)
-                            ex_result = "人狼" if (ex_role and ex_role.name == "人狼") else "人間"
-                            try:
-                                await p.send(f"👻 【霊媒結果】: 本日処刑された {executed_user.display_name} は 【**{ex_result}**】 でした。")
-                            except:
-                                pass
+            executed_user = channel.guild.get_member(most_voted_id)
+            if not executed_user:
+                executed_user = await channel.guild.fetch_member(most_voted_id)
+
+            if executed_user and executed_user in game.alive_players:
+                game.alive_players.remove(executed_user)
+                game.last_executed = executed_user  
+                await channel.send(f"⚖️ 運命の審判により、本日は 【**{executed_user.display_name}**】 が村から追放されました。")
+                await game.log_channel.send(f"⚖️ 処刑: {executed_user.display_name} (総投票ポイント: {max_votes_count})")
+                await channels.handle_player_death_vc(executed_user)
+                
+                for p, role in game.roles.items():
+                    if p in game.alive_players and role.name == "霊媒師":
+                        ex_role = game.roles.get(executed_user)
+                        ex_result = "人狼" if (ex_role and ex_role.name == "人狼") else "人間"
+                        try:
+                            await p.send(f"👻 【霊媒結果】: 本日処刑された {executed_user.display_name} は 【**{ex_result}**】 でした。")
+                        except:
+                            pass
 
         if await self.check_game_over(channel): 
             return
