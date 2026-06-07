@@ -80,6 +80,10 @@ class GameCog(commands.Cog):
 
     async def start_night(self, channel):
         game.actions = {}
+        
+        # 【追加】夜になったので生存者を全員マイクミュートにする
+        await channels.mute_all_alive_players(mute_status=True)
+        
         await channel.send("🌙 夜が訪れました。各役職者はBotからのDMを確認して行動を選択してください。")
         await game.log_channel.send("🌙 夜フェーズに移行しました。")
         
@@ -174,10 +178,16 @@ class GameCog(commands.Cog):
         await self.start_discussion(channel)
 
     async def start_discussion(self, channel):
+        # 【追加】昼の議論開始。生存者のマイクミュートを解除
+        await channels.mute_all_alive_players(mute_status=False)
+        
         await channel.send(f"💬 昼の議論を開始します。時間は {game.discussion_time} 秒です。生存者の皆さんは話し合ってください！")
         await game.log_channel.send("💬 昼の議論フェーズに入りました。")
         
         await asyncio.sleep(game.discussion_time)
+        
+        # 【追加】議論時間が切れたため、これ以上話せないように再度全員をミュート
+        await channels.mute_all_alive_players(mute_status=True)
         
         await channel.send("⏱️ 議論時間が終了しました。これより投票（処刑対象の選出）に移ります。")
         await self.start_voting(channel)
@@ -263,6 +273,9 @@ class GameCog(commands.Cog):
         victory_message = game.check_victory()
         if victory_message:
             game.is_playing = False
+            
+            # 【追加】ゲームが完全に終わったので、全員のミュートを安全に一斉解除する
+            await channels.mute_all_alive_players(mute_status=False)
             
             embed = discord.Embed(title="🏁 ゲーム終了！ 最終結果", color=discord.Color.gold(), description=f"🏆 **{victory_message}**")
             roles_reveal = ""
