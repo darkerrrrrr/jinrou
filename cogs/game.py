@@ -106,7 +106,7 @@ class GameCog(commands.Cog):
                 except:
                     pass
             elif role.name == "村人":
-                # 普通の村人のみにアイテム支給ガチャボタンを送信
+                # 【新ギミック】普通の村人のみにアイテム支給ガチャボタンを送信
                 try:
                     await player.send("🎒 **【夜間の身支度】** 明日の過酷な議論に備え、手荷物を確認しましょう。下のボタンからアイテムを1つ獲得できます。", view=ItemDrawView())
                 except:
@@ -303,7 +303,7 @@ class GameCog(commands.Cog):
             max_votes_count = max(votes.values())
             most_voted_ids = [pid for pid, v in votes.items() if v == max_votes_count]
             
-            # 🛠️ 【同票ランダム処刑の処理】
+            # 🛠️ 同票ランダム処刑（運命のダイス）の処理
             if len(most_voted_ids) > 1:
                 await channel.send("⚖️ 投票の結果、最多得票者が同数で並びました……！\n村の意見が割れたため、**運命のダイス（ランダム）**によって追放者が決定されます。")
                 most_voted_id = random.choice(most_voted_ids) 
