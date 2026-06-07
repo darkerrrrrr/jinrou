@@ -63,7 +63,6 @@ class MirrorSelect(discord.ui.Select):
         use_player_item(user.id)
         target_role = game.roles.get(target_member)
         
-        # 役職が普通の「村人」だった場合のみ、昨夜アイテムを支給されているはず
         if target_role and target_role.name == "村人":
             result_text = f"🟢 【鏡の魔力】 {target_member.display_name} さんは、昨夜『村人の身支度（アイテム支給）』を行っていました。（普通の村人である可能性が極めて高いです）"
         else:
