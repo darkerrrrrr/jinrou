@@ -4,6 +4,7 @@ from config import game
 class RecruitView(discord.ui.View):
     def __init__(self): 
         super().__init__(timeout=None)
+        self._recruit_view_instance = self
 
     def create_recruit_embed(self):
         roles_text = "\n".join([f"・{k}: {v}枚" for k, v in game.role_settings.items() if v > 0])
@@ -50,11 +51,26 @@ class TimeSettingModal(discord.ui.Modal, title='ゲーム時間の設定'):
         super().__init__()
         self.parent_view = parent_view
     async def on_submit(self, interaction: discord.Interaction):
-        game.discussion_time = int(self.discussion_input.value)
-        game.night_time = int(self.night_input.value)
-        game.morning_time = int(self.morning_input.value)
-        if game.recruit_message: await game.recruit_message.edit(embed=self.parent_view.create_recruit_embed(), view=self.parent_view)
-        await interaction.response.send_message("更新しました。", ephemeral=True)
+        try:
+            discussion_time = int(self.discussion_input.value)
+            night_time = int(self.night_input.value)
+            morning_time = int(self.morning_input.value)
+            
+            # バリデーション：正の数のみ許可
+            if discussion_time <= 0 or night_time <= 0 or morning_time <= 0:
+                return await interaction.response.send_message("⚠️ 時間は1秒以上で設定してください。", ephemeral=True)
+            if discussion_time > 3600 or night_time > 3600 or morning_time > 3600:
+                return await interaction.response.send_message("⚠️ 時間は3600秒以下で設定してください。", ephemeral=True)
+            
+            game.discussion_time = discussion_time
+            game.night_time = night_time
+            game.morning_time = morning_time
+            
+            if game.recruit_message: 
+                await game.recruit_message.edit(embed=self.parent_view.create_recruit_embed(), view=self.parent_view)
+            await interaction.response.send_message("✅ 更新しました。", ephemeral=True)
+        except ValueError:
+            await interaction.response.send_message("⚠️ 時間は数字で入力してください。", ephemeral=True)
 
 class RoleCountSelect(discord.ui.Select):
     def __init__(self, selected_role):
@@ -62,7 +78,8 @@ class RoleCountSelect(discord.ui.Select):
         current = game.role_settings[selected_role]
         limited = ["シリアルキラー", "怪盗", "占い師", "狩人", "狂人", "霊媒師"]
         limit = 2 if selected_role in limited else 4
-        options = [discord.SelectOption(label=f"{i}枚", value=str(i), default=(current == i)) for i in range(limit)]
+        # 0枚から始める（役職なしも選択可能）
+        options = [discord.SelectOption(label=f"{i}枚", value=str(i), default=(current == i)) for i in range(0, limit + 1)]
         super().__init__(placeholder=f"【{selected_role}】の枚数を選択", options=options)
     async def callback(self, interaction: discord.Interaction):
         game.role_settings[self.selected_role] = int(self.values[0])

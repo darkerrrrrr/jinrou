@@ -12,6 +12,10 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 async def setup_hook(): 
     await bot.load_extension("cogs.game")
     await bot.load_extension("cogs.item")
+    await bot.load_extension("cogs.phases")
+    await bot.load_extension("cogs.discussion")
+    await bot.load_extension("cogs.voting")
+    await bot.load_extension("cogs.night")
 
 @bot.event
 async def on_ready():

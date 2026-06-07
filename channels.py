@@ -2,6 +2,14 @@ import discord
 from config import game
 
 async def create_game_channels(guild):
+    # 既に同名カテゴリーが存在する場合は削除
+    for channel in guild.channels:
+        if isinstance(channel, discord.CategoryChannel) and channel.name == "🐺人狼ゲーム":
+            try:
+                await channel.delete()
+            except Exception as e:
+                print(f"⚠️ 既存カテゴリー削除失敗: {e}")
+    
     category = await guild.create_category("🐺人狼ゲーム")
     
     # サーバーの全員（@everyone）の初期権限設定
@@ -19,36 +27,43 @@ async def create_game_channels(guild):
     
     # 2. ゲームログと生存者ボイス（これらは全員が見えたり入れたりしてOK）
     game.log_channel = await guild.create_text_channel("ゲームログ", category=category)
-    game.alive_vc = await guild.create_voice_channel("🔊-生存者村", category=category)
+    game.alive_vc = await guild.create_voice_channel("生存者村", category=category)
     
     # 3. 霊界・墓場（初期状態は全員ロック。生きてる人はチャンネルの存在すら見えません）
-    game.dead_channel = await guild.create_text_channel("👻-墓場・霊界テキスト", category=category, overwrites=overwrites_text)
-    game.dead_vc = await guild.create_voice_channel("👻-墓場・霊界", category=category, overwrites=overwrites_vc)
+    game.dead_channel = await guild.create_text_channel("墓場・霊界テキスト", category=category, overwrites=overwrites_text)
+    game.dead_vc = await guild.create_voice_channel("墓場・霊界", category=category, overwrites=overwrites_vc)
     
     return category
 
 async def setup_wolf_permissions():
     if not game.wolf_channel: return
     for p, role in game.roles.items():
+        # 人狼のみ人狼チャットにアクセス可能（狂人は除外）
         if role.name == "人狼":
             await game.wolf_channel.set_permissions(p, read_messages=True, send_messages=True, view_channel=True)
 
 async def handle_player_death_vc(player):
     # 【追加ポイント】プレイヤーが死亡した瞬間に、その人だけの「霊界の鍵」を開ける
     if game.dead_channel:
-        # 霊界テキストを見えるようにし、発言も許可
-        await game.dead_channel.set_permissions(player, read_messages=True, send_messages=True, view_channel=True)
+        try:
+            # 霊界テキストを見えるようにし、発言も許可
+            await game.dead_channel.set_permissions(player, read_messages=True, send_messages=True, view_channel=True)
+        except Exception as e:
+            print(f"⚠️ 死亡時のテキストチャンネル権限設定失敗 ({player.display_name}): {e}")
         
     if game.dead_vc:
-        # 霊界ボイスチャンネルを見えるようにし、接続（入室）も許可
-        await game.dead_vc.set_permissions(player, view_channel=True, connect=True)
+        try:
+            # 霊界ボイスチャンネルを見えるようにし、接続（入室）も許可
+            await game.dead_vc.set_permissions(player, view_channel=True, connect=True)
+        except Exception as e:
+            print(f"⚠️ 死亡時のボイスチャンネル権限設定失敗 ({player.display_name}): {e}")
 
     # 既にボイスチャンネルに入っている場合は、霊界ボイスへ強制移動
     if game.dead_vc and player.voice and player.voice.channel:
         try: 
             await player.move_to(game.dead_vc)
-        except: 
-            pass
+        except Exception as e:
+            print(f"⚠️ ボイスチャンネル強制移動失敗 ({player.display_name}): {e}")
 
 # ==========================================
 # 👇 ここから新しくミュート制御用関数を追加
@@ -65,5 +80,5 @@ async def mute_all_alive_players(mute_status: bool):
         if member in game.alive_players:
             try:
                 await member.edit(mute=mute_status)
-            except:
-                pass
+            except Exception as e:
+                print(f"⚠️ ミュート制御失敗 ({member.display_name}): {e}")

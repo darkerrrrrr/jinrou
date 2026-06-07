@@ -33,7 +33,12 @@ class WerewolfGame:
         if not self.alive_players: return None
         
         # チーム名（role.team）ではなく、役職名（role.name）で生存者を正確に数える
-        alive_role_names = [self.roles[p].name for p in self.alive_players]
+        alive_role_names = []
+        for p in self.alive_players:
+            if p not in self.roles:
+                print(f"⚠️ 警告: {p.display_name} が roles に存在しません")
+                continue
+            alive_role_names.append(self.roles[p].name)
         
         wolf_count = alive_role_names.count("人狼")
         sk_count = alive_role_names.count("シリアルキラー")

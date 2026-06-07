@@ -73,7 +73,7 @@ class MirrorSelect(discord.ui.Select):
 
 class MirrorUseView(discord.ui.View):
     def __init__(self, alive_players):
-        super().__init__(timeout=None)
+        super().__init__(timeout=300)  # 昼フェーズ中に使用するため、5分のタイムアウト
         # 生存者リストをSelectメニューに引き渡す
         self.add_item(MirrorSelect(alive_players))
 
@@ -90,6 +90,9 @@ class ItemDrawView(discord.ui.View):
         if user.id in player_items:
             return await interaction.response.send_message("今夜の準備はすでに完了しています。", ephemeral=True)
         
+        # ボタン無効化で二重取得を防止
+        button.disabled = True
+        
         item_name = random.choice(list(ITEMS.keys()))
         player_items[user.id] = item_name
         
@@ -99,14 +102,28 @@ class ItemDrawView(discord.ui.View):
                 view=MegaphoneUseView()
             )
         elif item_name == "🪞 姿写しの鏡":
-            # 💡 現在のゲームの生存者リストをViewに渡してメニューを生成
             await interaction.response.edit_message(
                 content=f"🎒 **アイテムを支給されました！**\n\n手に入れたもの: **{item_name}**\n効果: {ITEMS[item_name]}\n\n👇 **昼の議論中、怪しいと思った人を1人選んで正体を覗き見てください！**", 
-                view=MirrorUseView(game.alive_players)
+                view=MirrorUseView([p for p in game.alive_players])
+            )
+        elif item_name == "📝 遺言ノート":
+            await interaction.response.edit_message(
+                content=f"🎒 **アイテムを支給されました！**\n\n手に入れたもの: **{item_name}**\n効果: {ITEMS[item_name]}\n\n💡 このアイテムは朝フェーズで自動的に効果が発動します。大切に保管してください。", 
+                view=None
+            )
+        elif item_name == "🛡️ お守り":
+            await interaction.response.edit_message(
+                content=f"🎒 **アイテムを支給されました！**\n\n手に入れたもの: **{item_name}**\n効果: {ITEMS[item_name]}\n\n💡 このアイテムは朝フェーズで自動的に効果が発動します。今夜人狼に襲撃されても生き残ります！", 
+                view=None
+            )
+        elif item_name in ["🍯 泥団子", "🤐 沈黙の御札", "🧪 疑惑の劇薬"]:
+            await interaction.response.edit_message(
+                content=f"🎒 **アイテムを支給されました！**\n\n手に入れたもの: **{item_name}**\n効果: {ITEMS[item_name]}\n\n💡 このアイテムは投票フェーズで使用できます。投票時に『使う』を選んでください。", 
+                view=None
             )
         else:
             await interaction.response.edit_message(
-                content=f"🎒 **アイテムを支給されました！**\n\n手に入れたもの: **{item_name}**\n効果: {ITEMS[item_name]}\n\n朝の犠牲者判定や、投票フェーズで自動的に効果が発動します。大切にしまっておいてください。", 
+                content=f"🎒 **アイテムを支給されました！**\n\n手に入れたもの: **{item_name}**\n効果: {ITEMS[item_name]}\n\n大切にしまっておいてください。", 
                 view=None
             )
 

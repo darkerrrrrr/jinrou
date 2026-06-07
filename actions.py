@@ -13,9 +13,9 @@ class ActionSelect(discord.ui.Select):
 
     async def callback(self, interaction: discord.Interaction):
         target_id = int(self.values[0])
-        target_user = interaction.client.get_user(target_id)
+        target_user = interaction.guild.get_member(target_id)
         if not target_user:
-            target_user = await interaction.client.fetch_user(target_id)
+            target_user = await interaction.guild.fetch_member(target_id)
         
         game.actions[self.actor] = {"action": self.action_label, "target": target_user}
         await interaction.response.edit_message(content=f"選択完了: 【{target_user.display_name}】に「{self.action_label}」を行います。", view=None)
