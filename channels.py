@@ -49,3 +49,21 @@ async def handle_player_death_vc(player):
             await player.move_to(game.dead_vc)
         except: 
             pass
+
+# ==========================================
+# 👇 ここから新しくミュート制御用関数を追加
+# ==========================================
+
+async def mute_all_alive_players(mute_status: bool):
+    """
+    生存者ボイスチャンネルにいる生存プレイヤーを全員一括でミュート/解除する
+    mute_status = True でマイクミュート、False でミュート解除
+    """
+    if not game.alive_vc: return
+    for member in game.alive_vc.members:
+        # 生存者ボイスチャンネルの中にいる、かつ「現在ゲームで生存しているプレイヤー」のみを対象にする
+        if member in game.alive_players:
+            try:
+                await member.edit(mute=mute_status)
+            except:
+                pass
