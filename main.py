@@ -25,7 +25,7 @@ async def on_message(message):
     if message.author.bot:
         return
 
-    # コマンド（!game_setup や DMでの役職アクションなど）を正常に実行するための処理
+    # コマンド（!game_setup や DMでのアクションなど）を正常に実行するための処理
     await bot.process_commands(message)
 
 # 環境変数からトークンを読み込んで起動
