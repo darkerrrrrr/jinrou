@@ -2,10 +2,7 @@ import discord
 import random
 from config import game
 
-# プレイヤーの所持アイテム {ユーザーid: "アイテム名"}
 player_items = {}
-
-# 沈黙の御札によって、次の日にミュート（チャット禁止）にされる人のリスト {ユーザーid}
 silenced_players = set()
 
 ITEMS = {
@@ -18,7 +15,6 @@ ITEMS = {
     "🤐 沈黙の御札": "【投票用】投票フェーズで指定した1人を、次の日の昼の議論フェーズで完全ミュート（発言禁止）にします。"
 }
 
-# 📢 拡声器をDMから直接使うためのView
 class MegaphoneUseView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -26,7 +22,6 @@ class MegaphoneUseView(discord.ui.View):
     @discord.ui.button(label="📢 拡声器を使用する", style=discord.ButtonStyle.danger)
     async def use_megaphone(self, interaction: discord.Interaction, button: discord.ui.Button):
         user = interaction.user
-        
         if player_items.get(user.id) != "📢 拡声器":
             return await interaction.response.send_message("使用可能な拡声器を持っていません。", ephemeral=True)
         if not game.is_playing:
@@ -44,10 +39,10 @@ class MegaphoneUseView(discord.ui.View):
             )
             await game.text_channel.send(announcement)
 
-# 🪞 姿写しの鏡をDMから直接使うためのViewとSelect
 class MirrorSelect(discord.ui.Select):
-    def __init__(self):
-        options = [discord.SelectOption(label=p.display_name, value=str(p.id)) for p in game.alive_players]
+    def __init__(self, alive_players):
+        # 💡 起動時ではなく、アイテムが配られた時点の生存者リストを受け取って選択肢を作る
+        options = [discord.SelectOption(label=p.display_name, value=str(p.id)) for p in alive_players]
         super().__init__(placeholder="覗き見るプレイヤーを選択...", options=options)
 
     async def callback(self, interaction: discord.Interaction):
@@ -71,12 +66,11 @@ class MirrorSelect(discord.ui.Select):
         await interaction.response.edit_message(content=result_text, view=None)
 
 class MirrorUseView(discord.ui.View):
-    def __init__(self):
+    def __init__(self, alive_players):
         super().__init__(timeout=None)
-        self.add_item(MirrorSelect())
+        # 生存者リストをSelectに引き渡す
+        self.add_item(MirrorSelect(alive_players))
 
-
-# 🎲 夜フェーズで村人がアイテムを引くためのガチャView
 class ItemDrawView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=60)
@@ -84,7 +78,6 @@ class ItemDrawView(discord.ui.View):
     @discord.ui.button(label="🎲 持ち物を整理する (アイテムを引く)", style=discord.ButtonStyle.primary)
     async def draw_item(self, interaction: discord.Interaction, button: discord.ui.Button):
         user = interaction.user
-        
         if user.id in player_items:
             return await interaction.response.send_message("今夜の準備はすでに完了しています。", ephemeral=True)
         
@@ -97,9 +90,10 @@ class ItemDrawView(discord.ui.View):
                 view=MegaphoneUseView()
             )
         elif item_name == "🪞 姿写しの鏡":
+            # 💡 現在のゲームの生存者リストをViewに渡してボタンを表示
             await interaction.response.edit_message(
                 content=f"🎒 **アイテムを支給されました！**\n\n手に入れたもの: **{item_name}**\n効果: {ITEMS[item_name]}\n\n👇 **昼の議論中、怪しいと思った人を1人選んで正体を覗き見てください！**", 
-                view=MirrorUseView()
+                view=MirrorUseView(game.alive_players)
             )
         else:
             await interaction.response.edit_message(
@@ -116,3 +110,7 @@ def get_player_item(player_id):
 def use_player_item(player_id):
     if player_id in player_items:
         del player_items[player_id]
+
+# 💡 main.pyでload_extensionするために必須のセットアップ関数を追加
+async def setup(bot):
+    pass
