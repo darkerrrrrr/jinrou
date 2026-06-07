@@ -36,3 +36,7 @@ async def start_discussion(self, channel):
 
     await channel.send("⏱️ 議論時間が終了しました。これより投票（処刑対象の選出）に移ります。")
     await self.start_voting(channel)
+
+# Discord.py の拡張ロードシステム用関数
+async def setup(bot):
+    pass

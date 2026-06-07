@@ -154,3 +154,7 @@ async def process_night_results(self, channel):
 
     await asyncio.sleep(game.morning_time)
     await self.start_discussion(channel)
+
+# Discord.py の拡張ロードシステム用関数
+async def setup(bot):
+    pass

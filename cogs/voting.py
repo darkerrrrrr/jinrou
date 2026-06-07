@@ -136,3 +136,7 @@ async def start_voting(self, channel):
         return
 
     await self.start_night(channel)
+
+# Discord.py の拡張ロードシステム用関数
+async def setup(bot):
+    pass
