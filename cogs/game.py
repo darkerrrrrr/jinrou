@@ -24,8 +24,10 @@ class GameCog(commands.Cog):
     def __init__(self, bot): 
         self.bot = bot
 
-    @commands.command()
-    async def setup(self, ctx):
+    # 💡 コマンド名を「game_setup」に変更し、Discord.pyのシステム用setup関数との衝突を防止
+    # サーバー上での入力は「!game_setup」になります
+    @commands.command(name="game_setup")
+    async def game_setup(self, ctx):
         game.is_playing = False
         game.players = []            
         game.roles = {}              
@@ -106,7 +108,7 @@ class GameCog(commands.Cog):
                 except:
                     pass
             elif role.name == "村人":
-                # 【新ギミック】普通の村人のみにアイテム支給ガチャボタンを送信
+                # 普通の村人のみにアイテム支給ガチャボタンを送信
                 try:
                     await player.send("🎒 **【夜間の身支度】** 明日の過酷な議論に備え、手荷物を確認しましょう。下のボタンからアイテムを1つ獲得できます。", view=ItemDrawView())
                 except:
@@ -355,5 +357,6 @@ class GameCog(commands.Cog):
             return True
         return False
 
+# 💡 Discord.pyの拡張ロードシステム用関数（これで競合しません）
 async def setup(bot): 
     await bot.add_cog(GameCog(bot))
