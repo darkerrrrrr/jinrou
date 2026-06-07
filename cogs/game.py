@@ -8,6 +8,9 @@ from views import RecruitView
 from actions import ActionView
 import channels
 
+# アイテムシステム関連の関数・データをインポート
+from cogs.item import reset_items, ItemDrawView, get_player_item, use_player_item, silenced_players
+
 from roles.werewolf import Werewolf
 from roles.seer import Seer
 from roles.medium import Medium
@@ -23,7 +26,6 @@ class GameCog(commands.Cog):
 
     @commands.command()
     async def setup(self, ctx):
-        # 【修正点1】2戦目以降のバグを防ぐため、ゲームデータを一括で初期化する
         game.is_playing = False
         game.players = []            
         game.roles = {}              
@@ -63,6 +65,10 @@ class GameCog(commands.Cog):
         game.alive_players = game.players.copy()
         game.thief_action_done = False
         
+        # アイテム(拡声器など)が発動したときに全体通知を送るチャンネルを記憶
+        game.text_channel = channel 
+        silenced_players.clear() # ミュートプレイヤーリストの初期化
+        
         start_message = (
             f"ゲームを開始しました。\n"
             f"【テキスト】\n"
@@ -81,19 +87,28 @@ class GameCog(commands.Cog):
     async def start_night(self, channel):
         game.actions = {}
         
-        # 【追加】夜になったので生存者を全員マイクミュートにする
+        # 毎晩の最初に、前夜に引いたアイテムデータをリセット
+        reset_items()
+        
         await channels.mute_all_alive_players(mute_status=True)
         
-        await channel.send("🌙 夜が訪れました。各役職者はBotからのDMを確認して行動を選択してください。")
+        await channel.send("🌙 夜が訪れました。各役職者は行動を、村人は明日の身支度（アイテム支給）を行ってください。")
         await game.log_channel.send("🌙 夜フェーズに移行しました。")
         
         for player, role in game.roles.items():
             if player not in game.alive_players: 
                 continue
+            
             label = role.get_action_label()
             if label:
                 try:
                     await player.send(f"【{role.name}】の能力発動時刻です。今夜の「{label}」対象者を選んでください。", view=ActionView(player, label))
+                except:
+                    pass
+            elif role.name == "村人":
+                # 【新ギミック】普通の村人のみにアイテム支給ガチャボタンを送信！
+                try:
+                    await player.send("🎒 **【夜間の身支度】** 明日の過酷な議論に備え、手荷物を確認しましょう。下のボタンからアイテムを1つ獲得できます。", view=ItemDrawView())
                 except:
                     pass
                     
@@ -150,6 +165,12 @@ class GameCog(commands.Cog):
                 await game.log_channel.send(f"🛡️ 狩人の護衛成功！ {target.display_name} への襲撃が阻止されました。")
             else:
                 if target in game.alive_players:
+                    # 💡 【アイテム効果】「🛡️ お守り」を持っていれば、身代わりにして襲撃を耐える
+                    if get_player_item(target.id) == "🛡️ お守り":
+                        await game.log_channel.send(f"✨ {target.display_name} は懐の「お守り」が身代わりとなり、人狼の襲撃を耐え抜いた！")
+                        use_player_item(target.id) 
+                        continue
+                    
                     dead_list.append(target)
 
         game.last_executed = None 
@@ -166,6 +187,12 @@ class GameCog(commands.Cog):
             result_str = "昨夜の犠牲者: " + ", ".join([p.display_name for p in dead_list])
             await channel.send(f"❌ {result_str}")
             await game.log_channel.send(f"❌ 犠牲者: {result_str}")
+            
+            # 💡 【アイテム効果】死んだ人が「📝 遺言ノート」を持っていたら自動発動！
+            for p in dead_list:
+                if get_player_item(p.id) == "📝 遺言ノート":
+                    await channel.send(f"📖 **{p.display_name}の遺言ノートが見つかりました：**\n*「私が死んだということは、人狼はあいつか……？ 村の皆、仇を取ってくれ……！」*")
+                    use_player_item(p.id)
         else:
             msg = "昨夜は誰も犠牲になりませんでした。"
             await channel.send(f"🛡️ {msg}")
@@ -178,17 +205,33 @@ class GameCog(commands.Cog):
         await self.start_discussion(channel)
 
     async def start_discussion(self, channel):
-        # 【追加】昼の議論開始。生存者のマイクミュートを解除
-        await channels.mute_all_alive_players(mute_status=False)
-        
+        # 💡 【アイテム効果】「🤐 沈黙の御札」を貼られている人はミュートを解除しない
+        alive_listeners = []
+        for p in game.alive_players:
+            if p.id in silenced_players:
+                # 前日に呪い札を貼られたプレイヤーは昼の議論中喋れない（チャットもVCも制限）
+                try:
+                    await p.edit(mute=True) # VCミュート維持
+                except: pass
+                await channel.send(f"🤐 **{p.display_name} さんは「沈黙の御札」の呪いにより、今日の議論での発言・チャットが禁止されています！**")
+            else:
+                alive_listeners.append(p)
+                
+        # 呪いにかかっていない生存者のミュートを解除
+        for p in alive_listeners:
+            try:
+                await p.edit(mute=False)
+            except: pass
+
         await channel.send(f"💬 昼の議論を開始します。時間は {game.discussion_time} 秒です。生存者の皆さんは話し合ってください！")
         await game.log_channel.send("💬 昼の議論フェーズに入りました。")
         
         await asyncio.sleep(game.discussion_time)
         
-        # 【追加】議論時間が切れたため、これ以上話せないように再度全員をミュート
+        # 議論終了時に全員一度ミュートし、呪いリストを次の日のためにクリア
         await channels.mute_all_alive_players(mute_status=True)
-        
+        silenced_players.clear() 
+
         await channel.send("⏱️ 議論時間が終了しました。これより投票（処刑対象の選出）に移ります。")
         await self.start_voting(channel)
 
@@ -210,9 +253,35 @@ class GameCog(commands.Cog):
                     return await interaction.response.send_message("既に投票済みです。", ephemeral=True)
                 
                 target_id = int(self.values[0])
-                votes[target_id] = votes.get(target_id, 0) + 1
+                target_member = interaction.guild.get_member(target_id)
                 voted_users.add(interaction.user)
                 
+                # 💡 【アイテム効果】「🍯 泥団子」を持っていた場合、相手の投票権を奪う（自分の投票をせず相手を不参加にする）
+                if get_player_item(interaction.user.id) == "🍯 泥団子":
+                    use_player_item(interaction.user.id)
+                    voted_users.add(target_member) # 被害者を「投票済み(これ以上選べない)」扱いにする
+                    await interaction.response.send_message(f"🍯 **【泥団子発動】** {interaction.user.display_name} さんが {target_member.display_name} さんに泥団子を投げつけ、今日の投票権を奪いました！")
+                    await game.log_channel.send(f"🍯 {interaction.user.display_name} が {target_member.display_name} の投票権を剥奪しました。")
+                    
+                    if len(voted_users) >= len(game.alive_players):
+                        self.view.stop()
+                    return
+
+                # 💡 【アイテム効果】「🤐 沈黙の御札」を持っていた場合、投票と同時に相手に翌日の沈黙の呪いをかける
+                if get_player_item(interaction.user.id) == "🤐 沈黙の御札":
+                    use_player_item(interaction.user.id)
+                    silenced_players.add(target_id)
+                    await interaction.response.send_message(f"🤐 **【沈黙の御札発動】** {interaction.user.display_name} さんが {target_member.display_name} さんに呪いの札を貼りました！明日彼は喋れません。")
+                    await game.log_channel.send(f"🤐 {interaction.user.display_name} が {target_member.display_name} に翌日の沈黙呪いを付与しました。")
+
+                # 💡 【アイテム効果】「🧪 疑惑の劇薬」を持っていた場合、投票ポイントを「2票分」にする
+                vote_power = 1
+                if get_player_item(interaction.user.id) == "🧪 疑惑の劇薬":
+                    vote_power = 2
+                    use_player_item(interaction.user.id)
+                    await game.log_channel.send(f"🧪 {interaction.user.display_name} は「疑惑の劇薬」により2票分を投票しました。")
+                
+                votes[target_id] = votes.get(target_id, 0) + vote_power
                 await interaction.response.send_message(f"【{interaction.user.display_name}】さんが投票しました。")
                 
                 if len(voted_users) >= len(game.alive_players):
@@ -229,16 +298,13 @@ class GameCog(commands.Cog):
         except:
             pass
 
-        # --- 投票結果の集計 ---
         if not votes:
             await channel.send("誰も投票しなかったため、本日の処刑は行われません。")
             await game.log_channel.send("🗳️ 投票がなかったため、処刑なし。")
         else:
-            # 【修正点2】最高得票数を取得し、最多得票者が複数（同票）いるかチェックする
             max_votes_count = max(votes.values())
             most_voted_ids = [pid for pid, v in votes.items() if v == max_votes_count]
             
-            # 最多得票の人が2人以上並んだ場合は「処刑なし」にする安全ルール
             if len(most_voted_ids) > 1:
                 await channel.send("⚖️ 投票の結果、最多得票者が同数で並んだため、本日の処刑は行われません。")
                 await game.log_channel.send(f"⚖️ 同票（得票数: {max_votes_count}）のため処刑なし。")
@@ -252,7 +318,7 @@ class GameCog(commands.Cog):
                     game.alive_players.remove(executed_user)
                     game.last_executed = executed_user  
                     await channel.send(f"⚖️ 投票の結果、本日は 【**{executed_user.display_name}**】 が村から追放されました。")
-                    await game.log_channel.send(f"⚖️ 処刑: {executed_user.display_name} (投票数: {votes[most_voted_id]})")
+                    await game.log_channel.send(f"⚖️ 処刑: {executed_user.display_name} (総得票ポイント: {votes[most_voted_id]})")
                     await channels.handle_player_death_vc(executed_user)
                     
                     for p, role in game.roles.items():
@@ -273,8 +339,6 @@ class GameCog(commands.Cog):
         victory_message = game.check_victory()
         if victory_message:
             game.is_playing = False
-            
-            # 【追加】ゲームが完全に終わったので、全員のミュートを安全に一斉解除する
             await channels.mute_all_alive_players(mute_status=False)
             
             embed = discord.Embed(title="🏁 ゲーム終了！ 最終結果", color=discord.Color.gold(), description=f"🏆 **{victory_message}**")
