@@ -5,11 +5,20 @@ from config import game
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
+intents.voice_states = True # 💡 VCのミュート制御（沈黙の御札など）に必要なため追加
+
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 @bot.event
 async def setup_hook(): 
+    # 💡 進行用の game と、新システムの item を両方確実にロードします
     await bot.load_extension("cogs.game")
+    await bot.load_extension("cogs.item")
+
+@bot.event
+async def on_ready():
+    print(f"🤖 ログインしました: {bot.user.name} (ID: {bot.user.id})")
+    print("─── アイテム人狼Bot 起動完了 ───")
 
 @bot.event
 async def on_message(message):
@@ -28,11 +37,12 @@ async def on_message(message):
                 # 自分以外の「人狼」プレイヤーに送る
                 if member != message.author and game.roles.get(member).name == "人狼":
                     try: 
-                        # 改良ポイント：太字で「誰が言ったか」をはっきりさせ、メッセージを挟み込みます
+                        # 太字で「誰が言ったか」をはっきりさせ、メッセージを挟み込みます
                         await member.send(f"💬 **[人狼チャット] {message.author.display_name}**: {message.content}")
                     except: 
                         pass
                         
     await bot.process_commands(message)
 
+# 環境変数からトークンを読み込んで起動
 bot.run(os.getenv("DISCORD_BOT_TOKEN"))
