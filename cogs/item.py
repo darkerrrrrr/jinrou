@@ -1,5 +1,6 @@
 import discord
 import random
+from typing import Optional
 from config import game
 
 ITEMS = {
