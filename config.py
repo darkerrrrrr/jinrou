@@ -52,7 +52,7 @@ class WerewolfGame:
         self.recruit_message: Optional[discord.Message] = None
         self.host: Optional[discord.Member] = None
         
-        self.role_dm_messages: Dict[int, int] = {}  # {ユーザーid: メッセージid}
+        self.role_dm_messages: Dict[int, List[int]] = {}  # {ユーザーid: [メッセージid, ...]}
         # アイテムシステム関連
         self.player_items: Dict[int, str] = {}  # {ユーザーid: "アイテム名"}
         self.will_notes: Dict[int, str] = {}    # {ユーザーid: "遺言内容"}
@@ -71,6 +71,12 @@ class WerewolfGame:
 
         # 狩人の連続護衛制限用 {狩人id: 前回守ったターゲットid}
         self.last_protected: Dict[int, int] = {}
+
+    def add_dm_message(self, user_id: int, msg_id: int):
+        """削除対象のDMメッセージIDを記録する"""
+        if user_id not in self.role_dm_messages:
+            self.role_dm_messages[user_id] = []
+        self.role_dm_messages[user_id].append(msg_id)
 
     def reset_state(self):
         """ゲームの状態を初期状態にリセットする"""
@@ -247,7 +253,7 @@ class WerewolfGame:
         self.voted_user_ids = set(data.get("voted_user_ids", []))
         self.banned_voters = set(data.get("banned_voters", []))
         self.last_protected = {int(k): v for k, v in data.get("last_protected", {}).items()}
-        self.role_dm_messages = {int(k): v for k, v in data.get("role_dm_messages", {}).items()}
+        self.role_dm_messages = {int(k): v for k, v in data.get("role_dm_messages", {}).items()} # vはリストとして復元される
         self.thief_action_done = data.get("thief_action_done", False)
 
 _guild_games: Dict[int, WerewolfGame] = {}

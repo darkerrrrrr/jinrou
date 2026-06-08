@@ -46,7 +46,8 @@ async def start_night(self: 'GameCog', channel: discord.TextChannel) -> None:
                 actual_role = game.roles.get(game.last_executed)
                 result_team = "人狼" if (actual_role and actual_role.name == RoleName.WOLF) else "人間"
                 try:
-                    await player.send(f"👻 【霊媒結果】: 昨日追放された {game.last_executed.display_name} は 【**{result_team}**】 でした。")
+                    m_msg = await player.send(f"👻 【霊媒結果】: 昨日追放された {game.last_executed.display_name} は 【**{result_team}**】 でした。")
+                    game.add_dm_message(player.id, m_msg.id)
                 except: pass
             else:
                 try:
@@ -58,6 +59,7 @@ async def start_night(self: 'GameCog', channel: discord.TextChannel) -> None:
             try:
                 view = ActionView(player, label, timeout=game.night_time)
                 msg = await player.send(f"【{role.name}】の能力発動時刻です。今夜の「{label}」対象者を選んでください。", view=view)
+                game.add_dm_message(player.id, msg.id)
                 view.message = msg # タイムアウト時にメッセージを編集できるように保持
             except Exception as e:
                 print(f"⚠️ {player.display_name} ({role.name}) への能力通知DM失敗: {e}")
@@ -69,7 +71,8 @@ async def start_night(self: 'GameCog', channel: discord.TextChannel) -> None:
         elif role.name == RoleName.VILLAGER:
             # 普通の村人のみにアイテム支給ガチャボタンを送信
             try:
-                await player.send("🎒 **【夜間の身支度】** 明日の過酷な議論に備え、手荷物を確認しましょう。下のボタンからアイテムを1つ獲得できます。", view=ItemDrawView(timeout=game.night_time))
+                i_msg = await player.send("🎒 **【夜間の身支度】** 明日の過酷な議論に備え、手荷物を確認しましょう。下のボタンからアイテムを1つ獲得できます。", view=ItemDrawView(timeout=game.night_time))
+                game.add_dm_message(player.id, i_msg.id)
             except Exception as e:
                 print(f"⚠️ {player.display_name} へのアイテムガチャDM失敗: {e}")
                 if game.log_channel:
@@ -123,7 +126,8 @@ async def process_night_results(self: 'GameCog', channel: discord.TextChannel) -
                         await channels.setup_wolf_permissions(channel.guild)
 
                     try:
-                        await actor.send(f"🎭 【怪盗の強奪結果】: {target.display_name} から役職を奪いました！あなたの新しい役職は 【**{target_role.name}**】 です。")
+                        t_msg = await actor.send(f"🎭 【怪盗の強奪結果】: {target.display_name} から役職を奪いました！あなたの新しい役職は 【**{target_role.name}**】 です。")
+                        game.add_dm_message(actor.id, t_msg.id)
                     except Exception as e:
                         print(f"⚠️ {actor.display_name} (怪盗) への結果通知DM失敗: {e}")
         game.thief_action_done = True
@@ -149,7 +153,8 @@ async def process_night_results(self: 'GameCog', channel: discord.TextChannel) -
             result_team = "人狼" if (actual_role and actual_role.name == RoleName.WOLF) else "人間"
             game.event_log.append(f"🔮 占い師 {actor.display_name} → {target.display_name}：{result_team}")
             try:
-                await actor.send(f"🔮 【占い結果】: {target.display_name} を占いました。結果は 【**{result_team}**】 です。")
+                s_msg = await actor.send(f"🔮 【占い結果】: {target.display_name} を占いました。結果は 【**{result_team}**】 です。")
+                game.add_dm_message(actor.id, s_msg.id)
             except Exception as e:
                 print(f"⚠️ {actor.display_name} (占い師) への占い結果通知DM失敗: {e}")
         elif action == "混乱":
@@ -158,7 +163,8 @@ async def process_night_results(self: 'GameCog', channel: discord.TextChannel) -
                 await game.log_channel.send(f"🌀 {actor.display_name} が {target.display_name} を混乱させました。")
             game.event_log.append(f"🌀 狂人 {actor.display_name} → {target.display_name} を混乱させた")
             try:
-                await actor.send(f"🌀 【混乱成功】: {target.display_name} を混乱させました。")
+                c_msg = await actor.send(f"🌀 【混乱成功】: {target.display_name} を混乱させました。")
+                game.add_dm_message(actor.id, c_msg.id)
             except: pass
         elif action == "護衛":
                 guarded_targets.add(target)

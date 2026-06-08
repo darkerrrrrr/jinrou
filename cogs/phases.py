@@ -68,7 +68,8 @@ async def execute_game_start(self: 'GameCog', channel: discord.TextChannel) -> N
             
             # ゲーム開始DMを送信
             try:
-                await p.send("🎮 **人狼ゲームが開始されました！**\nあなたの役職DMをご確認ください。")
+                start_dm = await p.send("🎮 **人狼ゲームが開始されました！**\nあなたの役職DMをご確認ください。")
+                game.add_dm_message(p.id, start_dm.id)
             except Exception as e:
                 print(f"⚠️ {p.display_name} へのゲーム開始DM送信失敗: {e}")
 
@@ -78,7 +79,7 @@ async def execute_game_start(self: 'GameCog', channel: discord.TextChannel) -> N
                 partners = [w.display_name for w in werewolves if w != p]
                 msg += f"\n🐺 仲間の人狼: {', '.join(partners)}"
             dm_msg = await p.send(msg)
-            game.role_dm_messages[p.id] = dm_msg.id # DMメッセージIDを保存
+            game.add_dm_message(p.id, dm_msg.id)
         except Exception as e:
             err_msg = f"⚠️ {p.mention} への役職通知DM送信に失敗しました。設定を確認してください。"
             print(f"❌ {err_msg}: {e}")
@@ -283,16 +284,19 @@ async def check_game_over(self: 'GameCog', channel: discord.TextChannel) -> bool
         game.recruit_message = None # メッセージ参照もクリア
 
         # 5. gameオブジェクトの状態をリセット
-        # 6. DMで送った役職通知メッセージを削除
-        for player_id, msg_id in game.role_dm_messages.items():
+        # 6. DMで送った全メッセージを削除
+        for player_id, msg_ids in game.role_dm_messages.items():
             player = channel.guild.get_member(player_id)
             if player:
                 try:
                     dm_channel = await player.create_dm()
-                    msg = await dm_channel.fetch_message(msg_id)
-                    await msg.delete()
+                    for msg_id in msg_ids:
+                        try:
+                            msg = await dm_channel.fetch_message(msg_id)
+                            await msg.delete()
+                        except: pass # 既に削除されている場合はスキップ
                 except Exception as e:
-                    print(f"⚠️ {player.display_name} の役職通知DM削除失敗: {e}")
+                    print(f"⚠️ {player.display_name} のDM削除失敗: {e}")
         game.reset_state()
         return True
     return False

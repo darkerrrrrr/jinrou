@@ -87,9 +87,17 @@ class GameCog(commands.Cog):
         await ctx.send(embed=embed)
 
     @commands.command(name="msgdel")
-    @commands.has_permissions(manage_messages=True)
     async def msgdel(self, ctx, amount: int):
         """指定した件数のメッセージを削除します。例: !msgdel 10"""
+        game = get_game(ctx.guild.id)
+
+        # ゲームが進行中の場合のみ、管理者権限またはホスト権限をチェックする
+        if game.is_playing:
+            is_admin = ctx.author.guild_permissions.manage_messages
+            is_host = (game.host and ctx.author.id == game.host.id)
+            if not (is_admin or is_host):
+                return await ctx.send("❌ ゲーム進行中は、混乱を防ぐため管理者またはホストのみがメッセージを削除できます。", delete_after=5)
+
         # コマンド自体のメッセージも含めて削除するため、指定数+1を削除します
         deleted = await ctx.channel.purge(limit=amount + 1)
         await ctx.send(f"🧹 {len(deleted)-1}件のメッセージを削除しました。", delete_after=5)
