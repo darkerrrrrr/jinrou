@@ -1,4 +1,4 @@
-import discord, random, io
+import discord, random, io, asyncio, os
 from config import get_game, RoleName, update_leaderboard
 import channels
 from typing import TYPE_CHECKING
@@ -199,7 +199,19 @@ async def check_game_over(self: 'GameCog', channel: discord.TextChannel) -> bool
         full_log = "\n".join(game.event_log)
         file = discord.File(io.StringIO(full_log), filename=f"game_log_{channel.guild.id}.txt")
 
-        await channel.send(embed=embed, file=file)
+        # 📢 「📊人狼戦績・結果」チャンネルを探し、なければ自動生成する
+        result_destination = discord.utils.get(channel.guild.text_channels, name="📊人狼戦績・結果")
+        if not result_destination:
+            try:
+                # ゲーム用カテゴリの外（サーバーのトップレベル）に作成します
+                result_destination = await channel.guild.create_text_channel("📊人狼戦績・結果", reason="人狼ゲームの結果記録用")
+                await result_destination.send("📁 **人狼アーカイブ**：ここにゲームの対戦記録が自動的に保存されます。")
+            except Exception:
+                # 万が一作成に失敗した場合は、ボットを呼び出した元のチャンネルを予備として使用
+                result_destination = game.text_channel or channel
+
+        await result_destination.send(embed=embed, file=file)
+
         await game.log_channel.send(f"🏁 ゲームが終了しました。結果: {victory_message}")
         await game.log_channel.send("─── ゲームログの記録を終了しました ───")
 
@@ -249,10 +261,18 @@ async def check_game_over(self: 'GameCog', channel: discord.TextChannel) -> bool
                 if ch:
                     try:
                         await ch.delete()
-                    except Exception as e_ch:
-                        print(f"⚠️ チャンネル '{ch.name}' 削除失敗: {e_ch}")
+                    except Exception:
+                        pass
 
-        # 3. gameオブジェクトのチャンネル参照をクリア (reset_stateで大部分はクリアされるが念のため)
+        # 3. 保存されていた一時的なゲームデータファイルを削除
+        state_file = f"data/game_{channel.guild.id}.json"
+        if os.path.exists(state_file):
+            try:
+                os.remove(state_file)
+            except Exception as e:
+                print(f"⚠️ セーブデータ削除失敗: {e}")
+
+        # 4. gameオブジェクトのチャンネル参照をクリア (reset_stateで大部分はクリアされるが念のため)
         game.progress_channel = None
         game.wolf_channel = None
         game.log_channel = None
@@ -262,8 +282,8 @@ async def check_game_over(self: 'GameCog', channel: discord.TextChannel) -> bool
         game.data_channel = None
         game.recruit_message = None # メッセージ参照もクリア
 
-        # 4. gameオブジェクトの状態をリセット
-        # 5. DMで送った役職通知メッセージを削除
+        # 5. gameオブジェクトの状態をリセット
+        # 6. DMで送った役職通知メッセージを削除
         for player_id, msg_id in game.role_dm_messages.items():
             player = channel.guild.get_member(player_id)
             if player:

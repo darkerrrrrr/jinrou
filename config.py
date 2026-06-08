@@ -52,6 +52,7 @@ class WerewolfGame:
         self.recruit_message: Optional[discord.Message] = None
         self.host: Optional[discord.Member] = None
         
+        self.role_dm_messages: Dict[int, int] = {}  # {ユーザーid: メッセージid}
         # アイテムシステム関連
         self.player_items: Dict[int, str] = {}  # {ユーザーid: "アイテム名"}
         self.will_notes: Dict[int, str] = {}    # {ユーザーid: "遺言内容"}
@@ -93,6 +94,7 @@ class WerewolfGame:
         self.voted_user_ids.clear()
         self.banned_voters.clear()
         self.night_skip_event.clear()
+        self.role_dm_messages.clear()
         self.day_count = 1
         self.event_log.clear()
         self.last_protected.clear()
@@ -171,6 +173,7 @@ class WerewolfGame:
             "voted_user_ids": list(self.voted_user_ids),
             "banned_voters": list(self.banned_voters),
             "last_protected": self.last_protected,
+            "role_dm_messages": self.role_dm_messages,
             "thief_action_done": self.thief_action_done
         }
 
@@ -244,6 +247,7 @@ class WerewolfGame:
         self.voted_user_ids = set(data.get("voted_user_ids", []))
         self.banned_voters = set(data.get("banned_voters", []))
         self.last_protected = {int(k): v for k, v in data.get("last_protected", {}).items()}
+        self.role_dm_messages = {int(k): v for k, v in data.get("role_dm_messages", {}).items()}
         self.thief_action_done = data.get("thief_action_done", False)
 
 _guild_games: Dict[int, WerewolfGame] = {}

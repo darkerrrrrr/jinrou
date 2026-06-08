@@ -86,6 +86,14 @@ class GameCog(commands.Cog):
         embed.description = ranking_text
         await ctx.send(embed=embed)
 
+    @commands.command(name="msgdel")
+    @commands.has_permissions(manage_messages=True)
+    async def msgdel(self, ctx, amount: int):
+        """指定した件数のメッセージを削除します。例: !msgdel 10"""
+        # コマンド自体のメッセージも含めて削除するため、指定数+1を削除します
+        deleted = await ctx.channel.purge(limit=amount + 1)
+        await ctx.send(f"🧹 {len(deleted)-1}件のメッセージを削除しました。", delete_after=5)
+
     # 分割したメソッドをバインド
     execute_game_start = execute_game_start
     start_night = start_night
