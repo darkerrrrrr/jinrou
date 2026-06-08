@@ -1,7 +1,7 @@
-import discord
+import discord, json, os
 from discord.ext import commands
 
-from config import game
+from config import get_game
 from views import RecruitView
 import channels
 
@@ -33,11 +33,27 @@ class GameCog(commands.Cog):
     @commands.command(name="game_setup")
     @commands.has_permissions(administrator=True)
     async def game_setup(self, ctx):
+        game = get_game(ctx.guild.id)
         game.reset_state()
         game.text_channel = ctx.channel
         game.host = ctx.author
         view = RecruitView()
-        game.recruit_message = await ctx.send(embed=view.create_recruit_embed(), view=view)
+        game.recruit_message = await ctx.send(embed=view.create_recruit_embed(ctx.guild.id), view=view)
+
+    @commands.command(name="game_resume")
+    @commands.has_permissions(administrator=True)
+    async def game_resume(self, ctx):
+        """保存されたデータからゲームを復旧する"""
+        file_path = f"data/game_{ctx.guild.id}.json"
+        if not os.path.exists(file_path):
+            return await ctx.send("⚠️ 保存されたゲームデータが見つかりません。")
+        
+        game = get_game(ctx.guild.id)
+        with open(file_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        
+        game.load_from_dict(data, ctx.guild)
+        await ctx.send(f"✅ {game.day_count}日目の状態からゲームを復旧しました。")
 
     # 分割したメソッドをバインド
     execute_game_start = execute_game_start

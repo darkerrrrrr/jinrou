@@ -1,5 +1,5 @@
-import discord, random
-from config import game, RoleName
+import discord, random, io
+from config import get_game, RoleName
 import channels
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
@@ -29,6 +29,7 @@ async def execute_game_start(self: 'GameCog', channel: discord.TextChannel) -> N
     Args:
         channel: メインチャンネル
     """
+    game = get_game(channel.guild.id)
     role_map = {
         RoleName.WOLF: Werewolf, 
         RoleName.SEER: Seer, 
@@ -77,7 +78,7 @@ async def execute_game_start(self: 'GameCog', channel: discord.TextChannel) -> N
     
     # ゲームチャンネルを生成
     await channels.create_game_channels(channel.guild)
-    await channels.setup_wolf_permissions()
+    await channels.setup_wolf_permissions(channel.guild)
     
     game.is_playing = True
     game.alive_players = game.players.copy()
@@ -101,6 +102,7 @@ async def execute_game_start(self: 'GameCog', channel: discord.TextChannel) -> N
     await channel.send(start_message)
     await game.log_channel.send("─── ゲームログの記録を開始しました ───")
     
+    game.save_to_file(channel.guild.id)
     await self.start_night(channel)
 
 
@@ -114,10 +116,11 @@ async def check_game_over(self: 'GameCog', channel: discord.TextChannel) -> bool
     Returns:
         ゲームが終了した場合はTrue、続行する場合はFalse
     """
+    game = get_game(channel.guild.id)
     victory_message = game.check_victory()
     if victory_message:
         game.is_playing = False
-        await channels.mute_all_alive_players(mute_status=False)
+        await channels.mute_all_alive_players(channel.guild, mute_status=False)
         
         # ゲーム終了メッセージ
         embed = discord.Embed(
@@ -131,7 +134,24 @@ async def check_game_over(self: 'GameCog', channel: discord.TextChannel) -> bool
             roles_reveal += f"・{p.mention} : **{role.name}** ({status})\n"
         embed.add_field(name="👥 全員の配役", value=roles_reveal)
         
-        await channel.send(embed=embed)
+        # タイムラインの追加 (1024文字制限を考慮して分割)
+        if game.event_log:
+            log_text = "\n".join(game.event_log)
+            # 1000文字ごとに区切ってフィールドを追加
+            chunks = [log_text[i:i+1000] for i in range(0, len(log_text), 1000)]
+            for i, chunk in enumerate(chunks):
+                field_name = "📜 ゲームの記録（タイムライン）" if i == 0 else f"📜 タイムライン (続き {i+1})"
+                embed.add_field(
+                    name=field_name,
+                    value=chunk,
+                    inline=False
+                )
+
+        # 📜 詳細ログをテキストファイルとして作成して送信
+        full_log = "\n".join(game.event_log)
+        file = discord.File(io.StringIO(full_log), filename=f"game_log_{channel.guild.id}.txt")
+
+        await channel.send(embed=embed, file=file)
         await game.log_channel.send(f"🏁 ゲームが終了しました。結果: {victory_message}")
         await game.log_channel.send("─── ゲームログの記録を終了しました ───")
         return True

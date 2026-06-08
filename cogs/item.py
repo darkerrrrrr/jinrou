@@ -1,7 +1,7 @@
 import discord
 import random
 from typing import Optional
-from config import game, RoleName
+from config import get_game, RoleName
 
 ITEMS = {
     "📢 拡声器": "【昼用】議論中、DMのボタンを押すとBotが全体チャットで全員に静聴を呼びかけ、あなたの発言に注目を集めます。",
@@ -22,9 +22,13 @@ class WillNoteModal(discord.ui.Modal):
         required=True,
         max_length=500
     )
+
     def __init__(self):
         super().__init__(title="遺言ノートの記入")
+
     async def on_submit(self, interaction: discord.Interaction):
+        if not interaction.guild: return
+        game = get_game(interaction.guild.id)
         game.player_items[interaction.user.id] = "📝 遺言ノート"
         game.will_notes[interaction.user.id] = self.content.value
         await interaction.response.send_message("✅ 遺言を書き残しました。人狼に殺害された場合のみ公開されます。", ephemeral=True)
@@ -37,13 +41,14 @@ class MegaphoneUseView(discord.ui.View):
     @discord.ui.button(label="📢 拡声器を使用する", style=discord.ButtonStyle.danger)
     async def use_megaphone(self, interaction: discord.Interaction, button: discord.ui.Button):
         user = interaction.user
+        game = get_game(interaction.guild.id)
         
         if game.player_items.get(user.id) != "📢 拡声器":
             return await interaction.response.send_message("使用可能な拡声器を持っていません。", ephemeral=True)
         if not game.is_playing:
             return await interaction.response.send_message("ゲーム中のみ使用可能です。", ephemeral=True)
 
-        use_player_item(user.id)
+        use_player_item(interaction.guild.id, user.id)
         await interaction.response.edit_message(content="📢 **拡声器を使用しました！** 全体チャンネルにアナウンスを送信しました。", view=None)
 
         if hasattr(game, 'text_channel') and game.text_channel:
@@ -57,8 +62,9 @@ class MegaphoneUseView(discord.ui.View):
 
 # 🪞 姿写しの鏡をDMから直接使うためのViewとSelect
 class MirrorSelect(discord.ui.Select):
-    def __init__(self, actor):
+    def __init__(self, actor: discord.Member):
         # 自分以外の生存者を選択肢にする
+        game = get_game(actor.guild.id)
         current_options = [
             discord.SelectOption(label=p.display_name, value=str(p.id)) 
             for p in game.alive_players if p != actor
@@ -67,6 +73,7 @@ class MirrorSelect(discord.ui.Select):
 
     async def callback(self, interaction: discord.Interaction):
         user = interaction.user
+        game = get_game(interaction.guild.id)
         if game.player_items.get(user.id) != "🪞 姿写しの鏡":
             return await interaction.response.send_message("使用可能な鏡を持っていません。", ephemeral=True)
 
@@ -79,7 +86,7 @@ class MirrorSelect(discord.ui.Select):
         if target_member not in game.alive_players:
             return await interaction.response.send_message("そのプレイヤーは既に生存していないため、覗き見ることはできません。", ephemeral=True)
 
-        use_player_item(user.id)
+        use_player_item(interaction.guild.id, user.id)
         target_role = game.roles.get(target_member)
         
         if target_role and target_role.name == RoleName.VILLAGER:
@@ -90,7 +97,7 @@ class MirrorSelect(discord.ui.Select):
         await interaction.response.edit_message(content=result_text, view=None)
 
 class MirrorUseView(discord.ui.View):
-    def __init__(self, actor):
+    def __init__(self, actor: discord.Member):
         super().__init__(timeout=300)  # 昼フェーズ中に使用するため、5分のタイムアウト
         # 生存者リストをSelectメニューに引き渡す
         self.add_item(MirrorSelect(actor))
@@ -104,6 +111,7 @@ class ItemDrawView(discord.ui.View):
     @discord.ui.button(label="🎲 持ち物を整理する (アイテムを引く)", style=discord.ButtonStyle.primary)
     async def draw_item(self, interaction: discord.Interaction, button: discord.ui.Button):
         user = interaction.user
+        game = get_game(interaction.guild.id)
         
         if user.id in game.player_items:
             return await interaction.response.send_message("今夜の準備はすでに完了しています。", ephemeral=True)
@@ -143,11 +151,12 @@ class ItemDrawView(discord.ui.View):
                 view=None
             )
 
-def reset_items() -> None:
+def reset_items(guild_id: int) -> None:
     """全プレイヤーのアイテムをリセットする"""
+    game = get_game(guild_id)
     game.player_items.clear()
 
-def get_player_item(player_id: int) -> Optional[str]:
+def get_player_item(guild_id: int, player_id: int) -> Optional[str]:
     """
     プレイヤーの所持アイテムを取得する
     
@@ -157,15 +166,17 @@ def get_player_item(player_id: int) -> Optional[str]:
     Returns:
         アイテム名、持っていない場合はNone
     """
+    game = get_game(guild_id)
     return game.player_items.get(player_id, None)
 
-def use_player_item(player_id: int) -> None:
+def use_player_item(guild_id: int, player_id: int) -> None:
     """
     プレイヤーのアイテムを使用（削除）する
     
     Args:
         player_id: プレイヤーのDiscordユーザーID
     """
+    game = get_game(guild_id)
     if player_id in game.player_items:
         del game.player_items[player_id]
 

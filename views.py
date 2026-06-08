@@ -1,5 +1,5 @@
 import discord
-from config import game, RoleName
+from config import get_game, RoleName
 from discord.ext import commands
 from typing import TYPE_CHECKING, cast
 
@@ -10,7 +10,8 @@ class RecruitView(discord.ui.View):
     def __init__(self): 
         super().__init__(timeout=None)
 
-    def create_recruit_embed(self):
+    def create_recruit_embed(self, guild_id: int):
+        game = get_game(guild_id)
         roles_text = "\n".join([f"・{k}: {v}枚" for k, v in game.role_settings.items() if v > 0])
         embed = discord.Embed(title="🐺 人狼ゲーム", color=discord.Color.dark_red())
         embed.add_field(name="👥 配役構成", value=roles_text if roles_text else "未設定")
@@ -19,30 +20,35 @@ class RecruitView(discord.ui.View):
 
     @discord.ui.button(label="参加", style=discord.ButtonStyle.green, custom_id="join_btn")
     async def join(self, interaction: discord.Interaction, button: discord.ui.Button):
+        game = get_game(interaction.guild.id)
         if interaction.user not in game.players:
             game.players.append(interaction.user)
-            await interaction.response.edit_message(embed=self.create_recruit_embed(), view=self)
+            await interaction.response.edit_message(embed=self.create_recruit_embed(interaction.guild.id), view=self)
 
     @discord.ui.button(label="辞退", style=discord.ButtonStyle.red, custom_id="leave_btn")
     async def leave(self, interaction: discord.Interaction, button: discord.ui.Button):
+        game = get_game(interaction.guild.id)
         if interaction.user in game.players:
             game.players.remove(interaction.user)
-            await interaction.response.edit_message(embed=self.create_recruit_embed(), view=self)
+            await interaction.response.edit_message(embed=self.create_recruit_embed(interaction.guild.id), view=self)
 
     @discord.ui.button(label="⏱️ 時間設定", style=discord.ButtonStyle.secondary, custom_id="settings_btn")
     async def settings(self, interaction: discord.Interaction, button: discord.ui.Button):
+        game = get_game(interaction.guild.id)
         if not game.host or interaction.user.id != game.host.id: 
             return await interaction.response.send_message("主催者のみ可能です。", ephemeral=True)
         await interaction.response.send_modal(TimeSettingModal(parent_view=self))
 
     @discord.ui.button(label="👥 役職設定", style=discord.ButtonStyle.primary, custom_id="roles_btn")
     async def role_settings(self, interaction: discord.Interaction, button: discord.ui.Button):
+        game = get_game(interaction.guild.id)
         if not game.host or interaction.user.id != game.host.id: 
             return await interaction.response.send_message("主催者のみ可能です。", ephemeral=True)
-        await interaction.response.send_message("役職変更:", view=RoleSettingView(), ephemeral=True)
+        await interaction.response.send_message("役職変更:", view=RoleSettingView(interaction.guild.id), ephemeral=True)
 
     @discord.ui.button(label="▶ ゲーム開始", style=discord.ButtonStyle.blurple, custom_id="start_btn")
     async def start(self, interaction: discord.Interaction, button: discord.ui.Button):
+        game = get_game(interaction.guild.id)
         if not game.host or interaction.user.id != game.host.id: 
             return await interaction.response.send_message("主催者のみ可能です。", ephemeral=True)
         if len(game.players) < 3: return await interaction.response.send_message("3人以上で開始してください。", ephemeral=True)
@@ -70,6 +76,7 @@ class TimeSettingModal(discord.ui.Modal):
         self.parent_view = parent_view
     async def on_submit(self, interaction: discord.Interaction):
         try:
+            game = get_game(interaction.guild.id)
             discussion_time = int(self.discussion_input.value)
             night_time = int(self.night_input.value)
             morning_time = int(self.morning_input.value)
@@ -85,14 +92,15 @@ class TimeSettingModal(discord.ui.Modal):
             game.morning_time = morning_time
             
             if game.recruit_message: 
-                await game.recruit_message.edit(embed=self.parent_view.create_recruit_embed(), view=self.parent_view)
+                await game.recruit_message.edit(embed=self.parent_view.create_recruit_embed(interaction.guild.id), view=self.parent_view)
             await interaction.response.send_message("✅ 更新しました。", ephemeral=True)
         except ValueError:
             await interaction.response.send_message("⚠️ 時間は数字で入力してください。", ephemeral=True)
 
 class RoleCountSelect(discord.ui.Select):
-    def __init__(self, selected_role):
+    def __init__(self, guild_id: int, selected_role: str):
         self.selected_role = selected_role
+        game = get_game(guild_id)
         current = game.role_settings[selected_role]
         limited = [RoleName.SK, RoleName.THIEF, RoleName.SEER, RoleName.HUNTER, RoleName.MADMAN, RoleName.MEDIUM]
         limit = 2 if selected_role in limited else 4
@@ -101,23 +109,25 @@ class RoleCountSelect(discord.ui.Select):
         super().__init__(placeholder=f"【{selected_role}】の枚数を選択", options=options)
 
     async def callback(self, interaction: discord.Interaction):
+        game = get_game(interaction.guild.id)
         game.role_settings[self.selected_role] = int(self.values[0])
-        if game.recruit_message: await game.recruit_message.edit(embed=RecruitView().create_recruit_embed(), view=RecruitView())
-        await interaction.response.edit_message(content="更新しました。", view=RoleSettingView())
+        if game.recruit_message: await game.recruit_message.edit(embed=RecruitView().create_recruit_embed(interaction.guild.id), view=RecruitView())
+        await interaction.response.edit_message(content="更新しました。", view=RoleSettingView(interaction.guild.id))
 
 class RoleSelectMenu(discord.ui.Select):
-    def __init__(self):
+    def __init__(self, guild_id: int):
+        game = get_game(guild_id)
         options = [discord.SelectOption(label=f"{r} ({game.role_settings[r]}枚)", value=r) for r in game.role_settings.keys()]
         super().__init__(placeholder="変更したい役職を選択...", options=options)
     async def callback(self, interaction: discord.Interaction):
         v = discord.ui.View()
-        v.add_item(RoleCountSelect(self.values[0]))
+        v.add_item(RoleCountSelect(interaction.guild.id, self.values[0]))
         await interaction.response.edit_message(content="枚数を選択:", view=v)
 
 class RoleSettingView(discord.ui.View):
-    def __init__(self):
+    def __init__(self, guild_id: int):
         super().__init__(timeout=60)
-        self.add_item(RoleSelectMenu())
+        self.add_item(RoleSelectMenu(guild_id))
         close_btn = discord.ui.Button(label="設定完了", style=discord.ButtonStyle.secondary)
         async def close_callback(interaction: discord.Interaction): await interaction.response.edit_message(content="完了しました。", view=None)
         close_btn.callback = close_callback

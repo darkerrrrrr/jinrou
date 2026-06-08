@@ -1,5 +1,6 @@
 import discord
 from typing import Optional, Dict, List, Set, Any, TYPE_CHECKING, Union
+import json, os
 import asyncio
 
 if TYPE_CHECKING:
@@ -34,6 +35,8 @@ class WerewolfGame:
         self.text_channel: Optional[discord.TextChannel] = None
 
         self.discussion_time: int = 180
+        self.day_count: int = 1
+        self.event_log: List[str] = []
         self.night_time: int = 60
         self.morning_time: int = 15
         self.role_settings: Dict[str, int] = {
@@ -55,8 +58,16 @@ class WerewolfGame:
         # 狂人の混乱効果
         self.confused_players: Set[int] = set()  # 混乱させられたプレイヤーID（投票先がランダムになる）
 
+        # 投票システムの状態管理 (復旧用)
+        self.vote_details: Dict[int, List[Any]] = {}  # {投票者ID: [ターゲットID, 票の強さ]}
+        self.voted_user_ids: Set[int] = set()
+        self.banned_voters: Set[int] = set()
+
         # 進行制御用
         self.night_skip_event = asyncio.Event()
+
+        # 狩人の連続護衛制限用 {狩人id: 前回守ったターゲットid}
+        self.last_protected: Dict[int, int] = {}
 
     def reset_state(self):
         """ゲームの状態を初期状態にリセットする"""
@@ -76,27 +87,28 @@ class WerewolfGame:
         self.will_notes.clear()
         self.silenced_players.clear()
         self.confused_players.clear()
+        self.vote_details.clear()
+        self.voted_user_ids.clear()
+        self.banned_voters.clear()
         self.night_skip_event.clear()
+        self.day_count = 1
+        self.event_log.clear()
+        self.last_protected.clear()
 
     def check_night_actions_complete(self):
         """全員が夜の行動を終えたかチェックする"""
         required_count = 0
-        if not self.roles: return
+        if not self.roles or not self.players: return
         
         # 必要なアクション数を計算
         for p in self.alive_players:
             role = self.roles.get(p)
-            if not role:
-                continue
+            if not role: continue
             if getattr(role, "get_action_label", lambda: None)() or getattr(role, "name", "") == RoleName.VILLAGER:
                 required_count += 1
         
         # 行動済みの村人をカウント
-        done_villagers = 0
-        for p in self.alive_players:
-            role = self.roles.get(p)
-            if role and getattr(role, "name", "") == RoleName.VILLAGER and p.id in self.player_items:
-                done_villagers += 1
+        done_villagers = len([p for p in self.alive_players if getattr(self.roles.get(p), "name", "") == RoleName.VILLAGER and p.id in self.player_items])
         
         # 総アクション完了数 = 役職アクション完了数 + 村人のアイテム受取完了数
         current_count = len(self.actions) + done_villagers
@@ -138,4 +150,95 @@ class WerewolfGame:
             
         return None
 
-game = WerewolfGame()
+    def to_dict(self) -> dict:
+        """状態をJSON保存可能な辞書形式に変換"""
+        return {
+            "is_playing": self.is_playing,
+            "day_count": self.day_count,
+            "role_settings": self.role_settings,
+            "event_log": self.event_log,
+            "player_ids": [p.id for p in self.players],
+            "alive_ids": [p.id for p in self.alive_players],
+            "roles": {str(p.id): self.roles[p].name for p in self.roles if p in self.roles},
+            "actions": {str(m.id): {"action": d["action"], "target": d["target"].id if d["target"] else None} for m, d in self.actions.items()},
+            "player_items": self.player_items,
+            "will_notes": self.will_notes,
+            "silenced_players": list(self.silenced_players),
+            "confused_players": list(self.confused_players),
+            "vote_details": {str(k): v for k, v in self.vote_details.items()},
+            "voted_user_ids": list(self.voted_user_ids),
+            "banned_voters": list(self.banned_voters),
+            "last_protected": self.last_protected,
+            "thief_action_done": self.thief_action_done
+        }
+
+    def save_to_file(self, guild_id: int):
+        """状態をファイルに保存する"""
+        os.makedirs("data", exist_ok=True)
+        try:
+            with open(f"data/game_{guild_id}.json", "w", encoding="utf-8") as f:
+                json.dump(self.to_dict(), f, ensure_ascii=False, indent=4)
+        except Exception as e:
+            print(f"⚠️ 保存失敗: {e}")
+
+    def load_from_dict(self, data: dict, guild: discord.Guild):
+        """辞書データから状態を復元"""
+        from roles.werewolf import Werewolf
+        from roles.seer import Seer
+        from roles.medium import Medium
+        from roles.hunter import Hunter
+        from roles.thief import Thief
+        from roles.madman import Madman
+        from roles.serial_killer import SerialKiller
+        from roles.villager import Villager
+
+        role_map = {
+            RoleName.WOLF: Werewolf, RoleName.SEER: Seer, RoleName.MEDIUM: Medium,
+            RoleName.HUNTER: Hunter, RoleName.THIEF: Thief, RoleName.MADMAN: Madman,
+            RoleName.SK: SerialKiller, RoleName.VILLAGER: Villager
+        }
+
+        self.is_playing = data.get("is_playing", False)
+        self.day_count = data.get("day_count", 1)
+        self.role_settings = data.get("role_settings", self.role_settings)
+        self.event_log = data.get("event_log", [])
+        self.players = [guild.get_member(uid) for uid in data.get("player_ids", []) if guild.get_member(uid)]
+        self.alive_players = [guild.get_member(uid) for uid in data.get("alive_ids", []) if guild.get_member(uid)]
+
+        # 役職の復元
+        roles_data = data.get("roles", {})
+        self.roles = {}
+        for uid_str, role_name in roles_data.items():
+            member = guild.get_member(int(uid_str))
+            if member and role_name in role_map:
+                self.roles[member] = role_map[role_name](member)
+
+        # 夜のアクションの復元
+        actions_data = data.get("actions", {})
+        self.actions = {}
+        for uid_str, act_data in actions_data.items():
+            member = guild.get_member(int(uid_str))
+            if member:
+                target_id = act_data.get("target")
+                self.actions[member] = {
+                    "action": act_data["action"],
+                    "target": guild.get_member(target_id) if target_id else None
+                }
+
+        self.player_items = data.get("player_items", {})
+        self.will_notes = data.get("will_notes", {})
+        self.silenced_players = set(data.get("silenced_players", []))
+        self.confused_players = set(data.get("confused_players", []))
+        self.vote_details = {int(k): v for k, v in data.get("vote_details", {}).items()}
+        self.voted_user_ids = set(data.get("voted_user_ids", []))
+        self.banned_voters = set(data.get("banned_voters", []))
+        self.last_protected = {int(k): v for k, v in data.get("last_protected", {}).items()}
+        self.thief_action_done = data.get("thief_action_done", False)
+
+_guild_games: Dict[int, WerewolfGame] = {}
+
+def get_game(guild_id: int) -> WerewolfGame:
+    """ギルドIDに基づいてゲームインスタンスを取得する"""
+    if guild_id not in _guild_games:
+        _guild_games[guild_id] = WerewolfGame()
+    return _guild_games[guild_id]

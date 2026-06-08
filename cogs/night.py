@@ -1,5 +1,5 @@
-import discord, asyncio
-from config import game, RoleName
+import discord, asyncio, random
+from config import get_game, RoleName
 from actions import ActionView
 import channels
 from typing import TYPE_CHECKING
@@ -16,6 +16,7 @@ async def start_night(self: 'GameCog', channel: discord.TextChannel) -> None:
     Args:
         channel: メインチャンネル
     """
+    game = get_game(channel.guild.id)
     game.actions = {}
     game.night_skip_event.clear()
     
@@ -23,11 +24,14 @@ async def start_night(self: 'GameCog', channel: discord.TextChannel) -> None:
     alive_ids = {p.id for p in game.alive_players}
     game.player_items = {uid: item for uid, item in game.player_items.items() if uid in alive_ids}
     
-    await channels.mute_all_alive_players(mute_status=True)
+    await channels.mute_all_alive_players(channel.guild, mute_status=True)
     
+    game.event_log.append(f"═══ {game.day_count}日目：夜 ═══")
+
     await channel.send("🌙 夜が訪れました。各役職者はDMで行動を選択してください。\n村人は明日の身支度（アイテム支給）を行ってください。")
     if game.log_channel:
         await game.log_channel.send("🌙 夜フェーズを開始しました。")
+    game.save_to_file(channel.guild.id)
     
     for player, role in game.roles.items():
         if player not in game.alive_players: 
@@ -87,6 +91,7 @@ async def process_night_results(self: 'GameCog', channel: discord.TextChannel) -
     Args:
         channel: メインチャンネル
     """
+    game = get_game(channel.guild.id)
     if game.log_channel:
         await game.log_channel.send("☀️ 朝フェーズになり、夜の行動結果を処理しています。")
     
@@ -112,7 +117,7 @@ async def process_night_results(self: 'GameCog', channel: discord.TextChannel) -
 
                     # もし人狼を奪った場合、人狼チャットを見れるように権限を更新
                     if target_role.name == RoleName.WOLF:
-                        await channels.setup_wolf_permissions()
+                        await channels.setup_wolf_permissions(channel.guild)
 
                     try:
                         await actor.send(f"🎭 【怪盗の強奪結果】: {target.display_name} から役職を奪いました！あなたの新しい役職は 【**{target_role.name}**】 です。")
@@ -123,6 +128,8 @@ async def process_night_results(self: 'GameCog', channel: discord.TextChannel) -
     # 【役職ごとのアクション結果通知と集計】
     attacked_targets = set()
     guarded_targets = set()
+    current_protected = {} # 今回の護衛記録
+    wolf_attack_candidates = []
 
     for actor, data in game.actions.items():
         if actor not in game.alive_players: continue
@@ -137,6 +144,7 @@ async def process_night_results(self: 'GameCog', channel: discord.TextChannel) -
         if action == "占い":
             actual_role = game.roles.get(target)
             result_team = "人狼" if (actual_role and actual_role.name == RoleName.WOLF) else "人間"
+            game.event_log.append(f"🔮 占い師 {actor.display_name} → {target.display_name}：{result_team}")
             try:
                 await actor.send(f"🔮 【占い結果】: {target.display_name} を占いました。結果は 【**{result_team}**】 です。")
             except Exception as e:
@@ -145,13 +153,24 @@ async def process_night_results(self: 'GameCog', channel: discord.TextChannel) -
             game.confused_players.add(target.id)
             if game.log_channel:
                 await game.log_channel.send(f"🌀 {actor.display_name} が {target.display_name} を混乱させました。")
+            game.event_log.append(f"🌀 狂人 {actor.display_name} → {target.display_name} を混乱させた")
             try:
                 await actor.send(f"🌀 【混乱成功】: {target.display_name} を混乱させました。")
             except: pass
         elif action == "護衛":
                 guarded_targets.add(target)
-        elif action in ["襲撃", "殺害"]:
+                game.event_log.append(f"🛡️ 狩人 {actor.display_name} → {target.display_name} を護衛")
+        elif action == "襲撃":
+                wolf_attack_candidates.append(target)
+        elif action == "殺害":
+                game.event_log.append(f"🔪 シリアルキラー {actor.display_name} → {target.display_name} を殺害")
                 attacked_targets.add(target)
+
+    # 人狼の襲撃先を1つに決定
+    if wolf_attack_candidates:
+        chosen_target = random.choice(wolf_attack_candidates)
+        attacked_targets.add(chosen_target)
+        game.event_log.append(f"🐺 人狼の襲撃 → {chosen_target.display_name}")
 
     # 【死亡判定】
     dead_list = []
@@ -162,10 +181,10 @@ async def process_night_results(self: 'GameCog', channel: discord.TextChannel) -
         else:
             if target in game.alive_players:
                 # 【アイテム効果】お守りを持っていれば、身代わりにして襲撃を耐える
-                if get_player_item(target.id) == "🛡️ お守り":
+                if get_player_item(channel.guild.id, target.id) == "🛡️ お守り":
                     if game.log_channel:
                         await game.log_channel.send(f"✨ {target.display_name} は懐の「お守り」が身代わりとなり、人狼の襲撃を耐え抜いた！")
-                    use_player_item(target.id) 
+                    use_player_item(channel.guild.id, target.id) 
                     continue
                 
                 dead_list.append(target)
@@ -183,7 +202,7 @@ async def process_night_results(self: 'GameCog', channel: discord.TextChannel) -
             if p in game.alive_players: 
                 game.alive_players.remove(p)
             names.append(p.display_name)
-            await channels.handle_player_death_vc(p)
+            await channels.handle_player_death_vc(p, channel.guild)
         
         embed.description = f"❌ 昨夜の犠牲者: **{', '.join(names)}**"
         await channel.send(embed=embed)
@@ -193,7 +212,7 @@ async def process_night_results(self: 'GameCog', channel: discord.TextChannel) -
         # 【アイテム効果】死んだ人が「遺言ノート」を持っていたら自動発動
         for p in dead_list:
             player_id = p.id
-            if get_player_item(player_id) == "📝 遺言ノート":
+            if get_player_item(channel.guild.id, player_id) == "📝 遺言ノート":
                 will_content = game.will_notes.get(player_id, "（何も書かれていなかった...）")
                 will_embed = discord.Embed(
                     title=f"📖 {p.display_name}の遺言",
@@ -201,7 +220,7 @@ async def process_night_results(self: 'GameCog', channel: discord.TextChannel) -
                     color=discord.Color.light_grey()
                 )
                 await channel.send(embed=will_embed)
-                use_player_item(player_id)
+                use_player_item(channel.guild.id, player_id)
     else:
         embed = discord.Embed(title="☀️ 朝の結果発表", color=discord.Color.green())
         embed.description = "🛡️ 昨夜は誰も犠牲になりませんでした。"
@@ -212,6 +231,7 @@ async def process_night_results(self: 'GameCog', channel: discord.TextChannel) -
     if await self.check_game_over(channel): 
         return
 
+    game.day_count += 1
     await asyncio.sleep(game.morning_time)
     await self.start_discussion(channel)
 

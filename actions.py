@@ -1,14 +1,22 @@
 import discord
-from config import game
+from config import get_game, RoleName
 from typing import Optional, List, Union
 
 class ActionSelect(discord.ui.Select):
     def __init__(self, actor: discord.Member, action_label: str):
         self.actor: discord.Member = actor
         self.action_label: str = action_label
+        
+        # インスタンス生成時にギルドのゲーム状態を取得
+        game = get_game(actor.guild.id)
+        
+        # 狩人の場合、前回守ったターゲットを除外する
+        last_id = game.last_protected.get(actor.id)
+        is_hunter = (game.roles.get(actor) and game.roles[actor].name == RoleName.HUNTER)
+
         options = [
             discord.SelectOption(label=p.display_name, value=str(p.id)) 
-            for p in game.alive_players if p != actor
+            for p in game.alive_players if p != actor and (not is_hunter or p.id != last_id)
         ]
         super().__init__(placeholder="対象のプレイヤーを選択...", options=options)
 
@@ -17,6 +25,7 @@ class ActionSelect(discord.ui.Select):
         guild = interaction.guild
         if not guild:
             return await interaction.response.send_message("このコマンドはサーバー内でのみ有効です。", ephemeral=True)
+        game = get_game(guild.id)
 
         # メンバーの取得
         target_user: Optional[Union[discord.Member, discord.User]] = guild.get_member(target_id)

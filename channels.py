@@ -1,5 +1,5 @@
 import discord
-from config import game, RoleName
+from config import get_game, RoleName
 import asyncio
 from typing import Optional
 
@@ -13,6 +13,7 @@ async def create_game_channels(guild: discord.Guild) -> Optional[discord.Categor
     Returns:
         作成したカテゴリチャンネル
     """
+    game = get_game(guild.id)
     category_name = f"🐺人狼ゲーム-{guild.id}"
     
     # 既存の同名カテゴリーをクリーンアップ
@@ -50,8 +51,9 @@ async def create_game_channels(guild: discord.Guild) -> Optional[discord.Categor
     
     return category
 
-async def setup_wolf_permissions() -> None:
+async def setup_wolf_permissions(guild: discord.Guild) -> None:
     """人狼チャットの権限を設定する（人狼のみアクセス可能）"""
+    game = get_game(guild.id)
     if not game.wolf_channel: return
     
     # 現在の人狼リストを特定
@@ -72,13 +74,14 @@ async def setup_wolf_permissions() -> None:
         except Exception as e:
             print(f"⚠️ 人狼チャット権限更新失敗 ({p.display_name}): {e}")
 
-async def handle_player_death_vc(player: discord.Member) -> None:
+async def handle_player_death_vc(player: discord.Member, guild: discord.Guild) -> None:
     """
     プレイヤー死亡時のボイスチャンネル権限を設定する
     
     Args:
         player: 死亡したプレイヤー
     """
+    game = get_game(guild.id)
     # 【追加ポイント】プレイヤーが死亡した瞬間に、その人だけの「霊界の鍵」を開ける
     if game.dead_channel:
         try:
@@ -105,11 +108,12 @@ async def handle_player_death_vc(player: discord.Member) -> None:
 # 👇 ここから新しくミュート制御用関数を追加
 # ==========================================
 
-async def mute_all_alive_players(mute_status: bool) -> None:
+async def mute_all_alive_players(guild: discord.Guild, mute_status: bool) -> None:
     """
     生存者ボイスチャンネルにいる生存プレイヤーを全員一括でミュート/解除する
     mute_status = True でマイクミュート、False でミュート解除
     """
+    game = get_game(guild.id)
     if not game.alive_vc: return
     for member in game.alive_vc.members:
         # 生存者ボイスチャンネルの中にいる、かつ「現在ゲームで生存しているプレイヤー」のみを対象にする

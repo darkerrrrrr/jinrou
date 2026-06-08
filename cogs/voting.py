@@ -1,5 +1,5 @@
 import discord, random
-from config import game, RoleName
+from config import get_game, RoleName
 import channels
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
@@ -16,18 +16,17 @@ async def start_voting(self: 'GameCog', channel: discord.TextChannel) -> None:
     Args:
         channel: メインチャンネル
     """
+    game = get_game(channel.guild.id)
+    game.event_log.append(f"═══ {game.day_count}日目：投票 ═══")
+
     await channel.send("🗳️ 生存者はメニューから本日追放するプレイヤーを1人選んで投票してください。")
+    game.save_to_file(channel.guild.id)
     if game.log_channel:
         await game.log_channel.send("🗳️ 投票フェーズに入りました。")
     
     view = discord.ui.View(timeout=60)
     select_options = [discord.SelectOption(label=p.display_name, value=str(p.id)) for p in game.alive_players]
     
-    # 投票の詳細を記録 {投票者ID: (ターゲットID, 票の強さ)}
-    vote_details = {}
-    voted_user_ids = set() # 実際に投票を完了した人のID
-    banned_voters = set() # 投票権を剥奪されたプレイヤー
-
     class ItemUsageView(discord.ui.View):
         def __init__(self, voter: discord.Member, target_member: discord.Member, item_name: str):
             super().__init__(timeout=30)
@@ -41,31 +40,35 @@ async def start_voting(self: 'GameCog', channel: discord.TextChannel) -> None:
             if button_interaction.user != self.voter:
                 return await button_interaction.response.send_message("このボタンは使用できません。", ephemeral=True)
             
-            use_player_item(self.voter.id)
+            game = get_game(button_interaction.guild.id)
+            use_player_item(button_interaction.guild.id, self.voter.id)
             self.used = True
             await button_interaction.response.defer()
             
             # アイテム効果を適用
             if self.item_name == "🍯 泥団子":
-                banned_voters.add(self.target_member.id)
+                game.banned_voters.add(self.target_member.id)
                 # 既に投票済みなら、その票を無効化（削除）する
-                if self.target_member.id in vote_details:
-                    del vote_details[self.target_member.id]
-                    voted_user_ids.discard(self.target_member.id)
+                if self.target_member.id in game.vote_details:
+                    del game.vote_details[self.target_member.id]
+                    game.voted_user_ids.discard(self.target_member.id)
                 
                 try:
                     await self.target_member.send(f"🍯 **【泥団子】** {self.voter.display_name} さんから泥団子を投げられました！")
                 except: pass
                 
+                game.save_to_file(button_interaction.guild.id)
                 if game.log_channel:
                     await game.log_channel.send(f"🍯 {self.voter.display_name} が {self.target_member.display_name} の投票権を剥奪しました。")
                 await channel.send(f"🍯 **【泥団子発動】** {self.voter.display_name} さんが {self.target_member.display_name} さんに泥団子を投げつけ、今日の投票権を奪いました！")
             elif self.item_name == "🤐 沈黙の御札":
                 game.silenced_players.add(self.target_member.id)
+                game.save_to_file(button_interaction.guild.id)
                 if game.log_channel:
                     await game.log_channel.send(f"🤐 {self.voter.display_name} が {self.target_member.display_name} に翌日の沈黙呪いを付与しました。")
                 await channel.send(f"🤐 **【沈黙の御札発動】** {self.voter.display_name} さんが {self.target_member.display_name} さんに呪いの札を貼りました！明日彼は喋れません。")
             elif self.item_name == "🧪 疑惑の劇薬":
+                game.save_to_file(button_interaction.guild.id)
                 if game.log_channel:
                     await game.log_channel.send(f"🧪 {self.voter.display_name} は「疑惑の劇薬」により2票分を投票しました。")
                 await channel.send(f"🧪 **【疑惑の劇薬発動】** {self.voter.display_name} さんの投票が2票分としてカウントされます！")
@@ -82,13 +85,14 @@ async def start_voting(self: 'GameCog', channel: discord.TextChannel) -> None:
     class VoteSelect(discord.ui.Select):
         async def callback(self, interaction: discord.Interaction):
             voter = interaction.user
+            game = get_game(interaction.guild.id)
             if not isinstance(voter, discord.Member) or voter not in game.alive_players:
                 return await interaction.response.send_message("生存者のみ投票可能です。", ephemeral=True)
             
             voter_id = voter.id
-            if voter_id in banned_voters:
+            if voter_id in game.banned_voters:
                 return await interaction.response.send_message("泥団子を投げられたため、投票権がありません。", ephemeral=True)
-            if voter_id in voted_user_ids:
+            if voter_id in game.voted_user_ids:
                  return await interaction.response.send_message("既に投票済みです。", ephemeral=True)
             
             target_id = int(self.values[0])
@@ -106,7 +110,7 @@ async def start_voting(self: 'GameCog', channel: discord.TextChannel) -> None:
 
             item_was_used = False
             # アイテムを持ってるかチェック
-            player_item = get_player_item(voter_id)
+            player_item = get_player_item(interaction.guild.id, voter_id)
             if player_item and player_item in ["🍯 泥団子", "🤐 沈黙の御札", "🧪 疑惑の劇薬"]:
                 # アイテム使用確認
                 item_view = ItemUsageView(voter, target_member, player_item)
@@ -135,12 +139,13 @@ async def start_voting(self: 'GameCog', channel: discord.TextChannel) -> None:
                 if game.log_channel:
                     await game.log_channel.send(f"🌀 {voter.display_name} は混乱しており、投票先が {target_member.display_name} に変更されました。")
             
-            voted_user_ids.add(voter_id)
-            vote_details[voter_id] = (target_id, vote_power)
+            game.voted_user_ids.add(voter_id)
+            game.vote_details[voter_id] = [target_id, vote_power]
+            game.save_to_file(interaction.guild.id)
             await interaction.followup.send(f"【{voter.display_name}】さんが投票しました。", ephemeral=True)
             
             # 生存者のうち、投票権のある全員が投票したら終了
-            if len(voted_user_ids) >= len([p for p in game.alive_players if p.id not in banned_voters]):
+            if len(game.voted_user_ids) >= len([p for p in game.alive_players if p.id not in game.banned_voters]):
                 view.stop()
 
     select_menu = VoteSelect(placeholder="追放するプレイヤーを選択...", options=select_options)
@@ -155,13 +160,13 @@ async def start_voting(self: 'GameCog', channel: discord.TextChannel) -> None:
         print(f"⚠️ 投票メッセージ編集失敗: {e}")
 
     # 投票しなかった人の発表
-    non_voters = [p for p in game.alive_players if p.id not in voted_user_ids and p.id not in banned_voters]
+    non_voters = [p for p in game.alive_players if p.id not in game.voted_user_ids and p.id not in game.banned_voters]
     if non_voters:
         await channel.send(f"⌛ **投票時間終了**\n未投票者: {', '.join([p.mention for p in non_voters])}\n(棄権は村の議論を停滞させます！)")
 
     # 最終的な集計
     final_tally = {} # {ターゲットID: 合計票数}
-    for v_id, (t_id, power) in vote_details.items():
+    for v_id, (t_id, power) in game.vote_details.items():
         final_tally[t_id] = final_tally.get(t_id, 0) + power
 
     if not final_tally:
@@ -203,6 +208,7 @@ async def start_voting(self: 'GameCog', channel: discord.TextChannel) -> None:
             game.alive_players.remove(executed_user)
             game.last_executed = executed_user  
             await channel.send(f"⚖️ 運命の審判により、本日は 【**{executed_user.display_name}**】 が村から追放されました。")
+            game.event_log.append(f"⚖️ 追放：{executed_user.display_name}")
             if game.log_channel:
                 await game.log_channel.send(f"⚖️ 処刑: {executed_user.display_name} (総投票ポイント: {max_votes_count})")
             await channels.handle_player_death_vc(executed_user)
