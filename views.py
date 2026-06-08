@@ -4,7 +4,6 @@ from config import game
 class RecruitView(discord.ui.View):
     def __init__(self): 
         super().__init__(timeout=None)
-        self._recruit_view_instance = self
 
     def create_recruit_embed(self):
         roles_text = "\n".join([f"・{k}: {v}枚" for k, v in game.role_settings.items() if v > 0])

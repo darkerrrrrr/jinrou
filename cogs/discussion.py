@@ -2,16 +2,18 @@ import discord, asyncio
 from config import game
 import channels
 
-# アイテムシステム関連
-from cogs.item import silenced_players
 
-
-async def start_discussion(self, channel):
-    """昼の議論フェーズを開始"""
+async def start_discussion(self, channel: discord.TextChannel) -> None:
+    """
+    昼の議論フェーズを開始する
+    
+    Args:
+        channel: メインチャンネル
+    """
     # 【アイテム効果】「沈黙の御札」を貼られている人はミュートを解除しない
     alive_listeners = []
     for p in game.alive_players:
-        if p.id in silenced_players:
+        if p.id in game.silenced_players:
             try:
                 await p.edit(mute=True) # VCミュート維持
             except: pass
@@ -23,7 +25,8 @@ async def start_discussion(self, channel):
     for p in alive_listeners:
         try:
             await p.edit(mute=False)
-        except: pass
+        except Exception as e:
+            print(f"⚠️ ミュート解除失敗 ({p.display_name}): {e}")
 
     await channel.send(f"💬 昼の議論を開始します。時間は {game.discussion_time} 秒です。生存者の皆さんは話し合ってください！")
     await game.log_channel.send("💬 昼の議論フェーズに入りました。")
@@ -32,7 +35,7 @@ async def start_discussion(self, channel):
     
     await channels.mute_all_alive_players(mute_status=True)
     # 昼フェーズ後に沈黙の呪いをクリア（翌昼には効果がなくなる）
-    silenced_players.clear() 
+    game.silenced_players.clear() 
 
     await channel.send("⏱️ 議論時間が終了しました。これより投票（処刑対象の選出）に移ります。")
     await self.start_voting(channel)

@@ -6,19 +6,24 @@ import channels
 # アイテムシステム関連
 from cogs.item import reset_items, ItemDrawView, get_player_item, use_player_item
 
-async def start_night(self, channel):
-    """夜フェーズを開始"""
+async def start_night(self, channel: discord.TextChannel) -> None:
+    """
+    夜フェーズを開始する
+    
+    Args:
+        channel: メインチャンネル
+    """
     game.actions = {}
     
     # 毎晩の最初に、前夜に引いたアイテムデータをリセット（ただし怪盗の役職交換後のアイテムは保持）
     # 新しく村人だけがアイテムを引くので、既に持ってるアイテムはそのまま
     new_items = {}
-    for player_id, item in player_items.items():
+    for player_id, item in game.player_items.items():
         # 死んだ人のアイテムは削除、生きてる人は保持
         if any(p.id == player_id for p in game.alive_players):
             new_items[player_id] = item
-    player_items.clear()
-    player_items.update(new_items)
+    game.player_items.clear()
+    game.player_items.update(new_items)
     
     await channels.mute_all_alive_players(mute_status=True)
     
@@ -46,8 +51,13 @@ async def start_night(self, channel):
     await process_night_results(self, channel)
 
 
-async def process_night_results(self, channel):
-    """夜の行動結果を処理"""
+async def process_night_results(self, channel: discord.TextChannel) -> None:
+    """
+    夜の行動結果を処理する
+    
+    Args:
+        channel: メインチャンネル
+    """
     await game.log_channel.send("☀️ 朝フェーズになり、夜の行動結果を処理しています。")
     
     # 【怪盗の強奪処理】

@@ -1,16 +1,27 @@
 import discord
 from config import game
+from typing import Optional
 
-async def create_game_channels(guild):
-    # 既に同名カテゴリーが存在する場合は削除
+async def create_game_channels(guild: discord.Guild) -> Optional[discord.CategoryChannel]:
+    """
+    ゲーム用のチャンネルカテゴリと各チャンネルを作成する
+    
+    Args:
+        guild: チャンネルを作成するDiscordサーバー
+        
+    Returns:
+        作成したカテゴリチャンネル
+    """
+    # 既に同名カテゴリーが存在する場合は削除（サーバーIDを含めて安全に）
+    category_name = f"🐺人狼ゲーム-{guild.id}"
     for channel in guild.channels:
-        if isinstance(channel, discord.CategoryChannel) and channel.name == "🐺人狼ゲーム":
+        if isinstance(channel, discord.CategoryChannel) and channel.name == category_name:
             try:
                 await channel.delete()
             except Exception as e:
                 print(f"⚠️ 既存カテゴリー削除失敗: {e}")
     
-    category = await guild.create_category("🐺人狼ゲーム")
+    category = await guild.create_category(category_name)
     
     # サーバーの全員（@everyone）の初期権限設定
     # テキスト用：見るのも読むのも禁止
@@ -35,14 +46,24 @@ async def create_game_channels(guild):
     
     return category
 
-async def setup_wolf_permissions():
+async def setup_wolf_permissions() -> None:
+    """人狼チャットの権限を設定する（人狼のみアクセス可能）"""
     if not game.wolf_channel: return
     for p, role in game.roles.items():
         # 人狼のみ人狼チャットにアクセス可能（狂人は除外）
         if role.name == "人狼":
-            await game.wolf_channel.set_permissions(p, read_messages=True, send_messages=True, view_channel=True)
+            try:
+                await game.wolf_channel.set_permissions(p, read_messages=True, send_messages=True, view_channel=True)
+            except Exception as e:
+                print(f"⚠️ 人狼チャット権限設定失敗 ({p.display_name}): {e}")
 
-async def handle_player_death_vc(player):
+async def handle_player_death_vc(player: discord.Member) -> None:
+    """
+    プレイヤー死亡時のボイスチャンネル権限を設定する
+    
+    Args:
+        player: 死亡したプレイヤー
+    """
     # 【追加ポイント】プレイヤーが死亡した瞬間に、その人だけの「霊界の鍵」を開ける
     if game.dead_channel:
         try:
@@ -69,7 +90,7 @@ async def handle_player_death_vc(player):
 # 👇 ここから新しくミュート制御用関数を追加
 # ==========================================
 
-async def mute_all_alive_players(mute_status: bool):
+async def mute_all_alive_players(mute_status: bool) -> None:
     """
     生存者ボイスチャンネルにいる生存プレイヤーを全員一括でミュート/解除する
     mute_status = True でマイクミュート、False でミュート解除

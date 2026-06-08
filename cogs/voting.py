@@ -3,11 +3,16 @@ from config import game
 import channels
 
 # アイテムシステム関連
-from cogs.item import get_player_item, use_player_item, silenced_players
+from cogs.item import get_player_item, use_player_item
 
 
-async def start_voting(self, channel):
-    """投票フェーズを開始"""
+async def start_voting(self, channel: discord.TextChannel) -> None:
+    """
+    投票フェーズを開始する
+    
+    Args:
+        channel: メインチャンネル
+    """
     await channel.send("🗳️ 生存者はメニューから本日追放するプレイヤーを1人選んで投票してください。")
     await game.log_channel.send("🗳️ 投票フェーズに入りました。")
     
@@ -38,7 +43,7 @@ async def start_voting(self, channel):
                 await game.log_channel.send(f"🍯 {self.voter.display_name} が {self.target_member.display_name} の投票権を剥奪しました。")
                 await channel.send(f"🍯 **【泥団子発動】** {self.voter.display_name} さんが {self.target_member.display_name} さんに泥団子を投げつけ、今日の投票権を奪いました！")
             elif self.item_name == "🤐 沈黙の御札":
-                silenced_players.add(self.target_member.id)
+                game.silenced_players.add(self.target_member.id)
                 await game.log_channel.send(f"🤐 {self.voter.display_name} が {self.target_member.display_name} に翌日の沈黙呪いを付与しました。")
                 await channel.send(f"🤐 **【沈黙の御札発動】** {self.voter.display_name} さんが {self.target_member.display_name} さんに呪いの札を貼りました！明日彼は喋れません。")
             elif self.item_name == "🧪 疑惑の劇薬":
@@ -66,7 +71,8 @@ async def start_voting(self, channel):
             if not target_member:
                 try:
                     target_member = await interaction.guild.fetch_member(target_id)
-                except:
+                except Exception as e:
+                    print(f"⚠️ プレイヤー取得失敗 (ID: {target_id}): {e}")
                     return await interaction.response.send_message("対象のプレイヤーが見つかりません。", ephemeral=True)
             
             # アイテムを持ってるかチェック
@@ -103,8 +109,8 @@ async def start_voting(self, channel):
     await view.wait()
     try:
         await vote_msg.edit(content="🗳️ 投票が締め切られました。", view=None)
-    except:
-        pass
+    except Exception as e:
+        print(f"⚠️ 投票メッセージ編集失敗: {e}")
 
     if not votes:
         await channel.send("誰も投票しなかったため、本日の処刑は行われません。")
@@ -123,7 +129,12 @@ async def start_voting(self, channel):
 
         executed_user = channel.guild.get_member(most_voted_id)
         if not executed_user:
-            executed_user = await channel.guild.fetch_member(most_voted_id)
+            try:
+                executed_user = await channel.guild.fetch_member(most_voted_id)
+            except Exception as e:
+                print(f"⚠️ 処刑対象プレイヤー取得失敗 (ID: {most_voted_id}): {e}")
+                await channel.send("⚠️ 処刑対象のプレイヤー情報を取得できませんでした。")
+                return
 
         if executed_user and executed_user in game.alive_players:
             game.alive_players.remove(executed_user)

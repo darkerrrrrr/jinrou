@@ -13,14 +13,19 @@ from roles.serial_killer import SerialKiller
 from roles.villager import Villager
 
 # アイテムシステム関連
-from cogs.item import silenced_players
+from cogs.item import reset_items
 
 async def setup(bot):
     pass
 
 
-async def execute_game_start(self, channel):
-    """ゲーム開始時の役職配置と初期化"""
+async def execute_game_start(self, channel: discord.TextChannel) -> None:
+    """
+    ゲーム開始時の役職配置と初期化を行う
+    
+    Args:
+        channel: メインチャンネル
+    """
     role_map = {
         "人狼": Werewolf, 
         "占い師": Seer, 
@@ -58,7 +63,7 @@ async def execute_game_start(self, channel):
     
     # アイテム(拡声器など)が発動したときに全体通知を送るチャンネルを記憶
     game.text_channel = channel 
-    silenced_players.clear() # ミュートプレイヤーリストの初期化
+    game.silenced_players.clear() # ミュートプレイヤーリストの初期化
     
     start_message = (
         f"ゲームを開始しました。\n"
@@ -76,8 +81,16 @@ async def execute_game_start(self, channel):
     await self.start_night(channel)
 
 
-async def check_game_over(self, channel):
-    """勝利条件をチェック"""
+async def check_game_over(self, channel: discord.TextChannel) -> bool:
+    """
+    勝利条件をチェックし、ゲーム終了処理を行う
+    
+    Args:
+        channel: メインチャンネル
+        
+    Returns:
+        ゲームが終了した場合はTrue、続行する場合はFalse
+    """
     victory_message = game.check_victory()
     if victory_message:
         game.is_playing = False

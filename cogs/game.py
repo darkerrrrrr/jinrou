@@ -1,14 +1,12 @@
-import discord, sys, os
+import discord
 from discord.ext import commands
-
-sys.path.append(os.getcwd())
 
 from config import game
 from views import RecruitView
 import channels
 
 # アイテムシステム関連のインポート
-from cogs.item import silenced_players
+from cogs.item import reset_items
 
 # 分割したフェーズのインポート
 from cogs.phases import execute_game_start, check_game_over
@@ -43,6 +41,8 @@ class GameCog(commands.Cog):
         game.last_executed_role_name = None
         game.thief_action_done = False
         game.recruit_message = None
+        game.player_items.clear()
+        game.silenced_players.clear()
 
         game.host = ctx.author
         view = RecruitView()

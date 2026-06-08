@@ -2,12 +2,6 @@ import discord
 import random
 from config import game
 
-# プレイヤーの所持アイテム {ユーザーid: "アイテム名"}
-player_items = {}
-
-# 沈黙の御札によって、次の日にミュート（チャット禁止）にされる人のリスト {ユーザーid}
-silenced_players = set()
-
 ITEMS = {
     "📢 拡声器": "【昼用】議論中、DMのボタンを押すとBotが全体チャットで全員に静聴を呼びかけ、あなたの発言に注目を集めます。",
     "📝 遺言ノート": "【パッシブ】これを持った状態で今夜人狼に殺されると、翌朝あなたの遺言が自動公開されます。",
@@ -27,7 +21,7 @@ class MegaphoneUseView(discord.ui.View):
     async def use_megaphone(self, interaction: discord.Interaction, button: discord.ui.Button):
         user = interaction.user
         
-        if player_items.get(user.id) != "📢 拡声器":
+        if game.player_items.get(user.id) != "📢 拡声器":
             return await interaction.response.send_message("使用可能な拡声器を持っていません。", ephemeral=True)
         if not game.is_playing:
             return await interaction.response.send_message("ゲーム中のみ使用可能です。", ephemeral=True)
@@ -53,7 +47,7 @@ class MirrorSelect(discord.ui.Select):
 
     async def callback(self, interaction: discord.Interaction):
         user = interaction.user
-        if player_items.get(user.id) != "🪞 姿写しの鏡":
+        if game.player_items.get(user.id) != "🪞 姿写しの鏡":
             return await interaction.response.send_message("使用可能な鏡を持っていません。", ephemeral=True)
 
         target_id = int(self.values[0])
@@ -87,14 +81,14 @@ class ItemDrawView(discord.ui.View):
     async def draw_item(self, interaction: discord.Interaction, button: discord.ui.Button):
         user = interaction.user
         
-        if user.id in player_items:
+        if user.id in game.player_items:
             return await interaction.response.send_message("今夜の準備はすでに完了しています。", ephemeral=True)
         
         # ボタン無効化で二重取得を防止
         button.disabled = True
         
         item_name = random.choice(list(ITEMS.keys()))
-        player_items[user.id] = item_name
+        game.player_items[user.id] = item_name
         
         if item_name == "📢 拡声器":
             await interaction.response.edit_message(
@@ -127,15 +121,31 @@ class ItemDrawView(discord.ui.View):
                 view=None
             )
 
-def reset_items():
-    player_items.clear()
+def reset_items() -> None:
+    """全プレイヤーのアイテムをリセットする"""
+    game.player_items.clear()
 
-def get_player_item(player_id):
-    return player_items.get(player_id, None)
+def get_player_item(player_id: int) -> Optional[str]:
+    """
+    プレイヤーの所持アイテムを取得する
+    
+    Args:
+        player_id: プレイヤーのDiscordユーザーID
+        
+    Returns:
+        アイテム名、持っていない場合はNone
+    """
+    return game.player_items.get(player_id, None)
 
-def use_player_item(player_id):
-    if player_id in player_items:
-        del player_items[player_id]
+def use_player_item(player_id: int) -> None:
+    """
+    プレイヤーのアイテムを使用（削除）する
+    
+    Args:
+        player_id: プレイヤーのDiscordユーザーID
+    """
+    if player_id in game.player_items:
+        del game.player_items[player_id]
 
 # 💡 main.pyで拡張機能としてエラーなく読み込ませるための必須関数（中身は空でOK）
 async def setup(bot):
