@@ -94,6 +94,16 @@ class GameCog(commands.Cog):
         deleted = await ctx.channel.purge(limit=amount + 1)
         await ctx.send(f"🧹 {len(deleted)-1}件のメッセージを削除しました。", delete_after=5)
 
+    @msgdel.error
+    async def msgdel_error(self, ctx, error):
+        """msgdelコマンド専用のエラーハンドリング"""
+        if isinstance(error, commands.MissingPermissions):
+            await ctx.send("❌ あなたには「メッセージの管理」権限がないため、このコマンドは実行できません。", delete_after=5)
+        elif isinstance(error, commands.BadArgument):
+            await ctx.send("❌ 削除する件数は数字で指定してください。例: !msgdel 10", delete_after=5)
+        else:
+            await ctx.send(f"❌ 予期せぬエラーが発生しました: {error}", delete_after=5)
+
     # 分割したメソッドをバインド
     execute_game_start = execute_game_start
     start_night = start_night
