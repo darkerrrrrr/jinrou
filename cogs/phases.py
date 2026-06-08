@@ -1,5 +1,5 @@
 import discord, random, io
-from config import get_game, RoleName
+from config import get_game, RoleName, update_leaderboard
 import channels
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
@@ -102,7 +102,7 @@ async def execute_game_start(self: 'GameCog', channel: discord.TextChannel) -> N
     await channel.send(start_message)
     await game.log_channel.send("─── ゲームログの記録を開始しました ───")
     
-    game.save_to_file(channel.guild.id)
+    await game.save_state(channel.guild)
     await self.start_night(channel)
 
 
@@ -121,6 +121,42 @@ async def check_game_over(self: 'GameCog', channel: discord.TextChannel) -> bool
     if victory_message:
         game.is_playing = False
         await channels.mute_all_alive_players(channel.guild, mute_status=False)
+
+        # 🏆 ランキングの更新
+        winner_team = ""
+        if "人狼陣営" in victory_message: winner_team = "人狼"
+        elif "村人陣営" in victory_message: winner_team = "村人"
+        elif "シリアルキラー" in victory_message: winner_team = "シリアルキラー"
+
+        if winner_team:
+            # 勝利陣営に属する全プレイヤー（死亡者含む）のIDを抽出
+            winners = [
+                p.id for p, role in game.roles.items() 
+                if getattr(role, "team", "") == winner_team
+            ]
+            if winners:
+                # 1. 統計の更新（参加者全員を対象に生存率なども計算）
+                update_leaderboard(
+                    channel.guild.id, 
+                    winners, 
+                    [p.id for p in game.players], 
+                    [p.id for p in game.alive_players],
+                    winner_team
+                )
+
+                # 2. 勝利ロールの付与
+                try:
+                    role_name = "🐺人狼勝利者"
+                    role = discord.utils.get(channel.guild.roles, name=role_name)
+                    if not role:
+                        role = await channel.guild.create_role(name=role_name, color=discord.Color.gold(), reason="人狼ゲーム勝利者用")
+                    
+                    for winner_id in winners:
+                        member = channel.guild.get_member(winner_id)
+                        if member:
+                            await member.add_roles(role)
+                except Exception as e:
+                    print(f"⚠️ ロール付与失敗: {e}")
         
         # ゲーム終了メッセージ
         embed = discord.Embed(

@@ -31,7 +31,7 @@ async def start_night(self: 'GameCog', channel: discord.TextChannel) -> None:
     await channel.send("🌙 夜が訪れました。各役職者はDMで行動を選択してください。\n村人は明日の身支度（アイテム支給）を行ってください。")
     if game.log_channel:
         await game.log_channel.send("🌙 夜フェーズを開始しました。")
-    game.save_to_file(channel.guild.id)
+    await game.save_state(channel.guild)
     
     for player, role in game.roles.items():
         if player not in game.alive_players: 
@@ -159,12 +159,16 @@ async def process_night_results(self: 'GameCog', channel: discord.TextChannel) -
             except: pass
         elif action == "護衛":
                 guarded_targets.add(target)
+                current_protected[actor.id] = target.id # 護衛対象を記録
                 game.event_log.append(f"🛡️ 狩人 {actor.display_name} → {target.display_name} を護衛")
         elif action == "襲撃":
                 wolf_attack_candidates.append(target)
         elif action == "殺害":
                 game.event_log.append(f"🔪 シリアルキラー {actor.display_name} → {target.display_name} を殺害")
                 attacked_targets.add(target)
+
+    # 今回の護衛記録を保存（次夜の制限に使用）
+    game.last_protected = current_protected
 
     # 人狼の襲撃先を1つに決定
     if wolf_attack_candidates:
@@ -232,6 +236,7 @@ async def process_night_results(self: 'GameCog', channel: discord.TextChannel) -
         return
 
     game.day_count += 1
+    await game.save_state(channel.guild) # 死亡処理と日付更新を保存
     await asyncio.sleep(game.morning_time)
     await self.start_discussion(channel)
 

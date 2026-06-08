@@ -49,6 +49,12 @@ async def create_game_channels(guild: discord.Guild) -> Optional[discord.Categor
     game.dead_channel = await guild.create_text_channel("👻墓場・霊界テキスト", category=category, overwrites=overwrites_text)
     game.dead_vc = await guild.create_voice_channel("👻墓場・霊界", category=category, overwrites=overwrites_vc)
     
+    # 4. データ保持チャンネル（ボット自身のみが読み書き可能にする）
+    data_overwrites = {guild.default_role: discord.PermissionOverwrite(view_channel=False)}
+    if guild.me:
+        data_overwrites[guild.me] = discord.PermissionOverwrite(view_channel=True, read_messages=True, send_messages=True)
+    game.data_channel = await guild.create_text_channel("🔐人狼データ保持", category=category, overwrites=data_overwrites)
+    
     return category
 
 async def setup_wolf_permissions(guild: discord.Guild) -> None:

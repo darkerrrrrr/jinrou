@@ -7,20 +7,23 @@ if TYPE_CHECKING:
     from .game import GameCog
 
 class DiscussionView(discord.ui.View):
-    def __init__(self, timeout):
+    def __init__(self, timeout, timer_msg: discord.Message, end_timestamp: int):
         super().__init__(timeout=timeout)
         self.ready_players = set()
         self.extend_players = set()
         self.skip_event = asyncio.Event()
         self.extend_event = asyncio.Event()
-        self.remaining_time = timeout
+        self.timer_msg = timer_msg
+        self.end_timestamp = end_timestamp
         self.extended = False
 
     @discord.ui.button(label="➕ 時間延長 (0/0)", style=discord.ButtonStyle.primary)
     async def extend(self, interaction: discord.Interaction, button: discord.ui.Button):
+        guild = interaction.guild
         user = interaction.user
-        game = get_game(interaction.guild.id)
-        if not isinstance(user, discord.Member) or user not in game.alive_players:
+        if not guild or not isinstance(user, discord.Member): return
+        game = get_game(guild.id)
+        if user not in game.alive_players:
             return await interaction.response.send_message("生存者のみ可能です。", ephemeral=True)
         
         if self.extended:
@@ -36,7 +39,19 @@ class DiscussionView(discord.ui.View):
             self.extended = True
             button.disabled = True
             button.label = "✅ 延長済み"
+            
+            # 実際の延長処理：終了時刻を60秒加算し、表示を更新
+            self.end_timestamp += 60
+            if self.timeout is not None:
+                self.timeout += 60
+            
+            new_ts = int(self.end_timestamp)
+            try:
+                await self.timer_msg.edit(content=f"💬 昼の議論を開始します。議論終了まで： <t:{new_ts}:R>\n生存者の皆さんは話し合ってください！")
+            except: pass
+
             self.extend_event.set()
+            await game.save_state(guild) # 保存
             await interaction.response.edit_message(content="⏳ 過半数の賛成により、議論時間を **60秒** 延長しました！", view=self)
         else:
             await interaction.response.edit_message(view=self)
@@ -62,6 +77,7 @@ class DiscussionView(discord.ui.View):
             button.style = discord.ButtonStyle.success
             button.disabled = True
             self.skip_event.set()
+            await game.save_state(interaction.guild) # 保存
             await interaction.response.edit_message(content=f"✅ {len(self.ready_players)}名が賛成したため、投票に移行します。", view=self)
         else:
             await interaction.response.edit_message(view=self)
@@ -105,13 +121,14 @@ async def start_discussion(self: 'GameCog', channel: discord.TextChannel) -> Non
     # 終了時刻を計算してDiscordの相対タイムスタンプを作成
     end_timestamp = int(time.time() + game.discussion_time)
     
-    await channel.send(f"💬 昼の議論を開始します。議論終了まで： <t:{end_timestamp}:R>\n生存者の皆さんは話し合ってください！")
+    timer_msg = await channel.send(f"💬 昼の議論を開始します。議論終了まで： <t:{end_timestamp}:R>\n生存者の皆さんは話し合ってください！")
+    
     if game.log_channel:
         await game.log_channel.send("💬 昼の議論フェーズに入りました。")
-    game.save_to_file(channel.guild.id)
+    await game.save_state(channel.guild)
     
     # スキップボタンの表示
-    view = DiscussionView(timeout=float(game.discussion_time))
+    view = DiscussionView(timeout=float(game.discussion_time), timer_msg=timer_msg, end_timestamp=end_timestamp)
     alive_count = len(game.alive_players)
     needed = (alive_count // 2) + 1
     
@@ -127,19 +144,32 @@ async def start_discussion(self: 'GameCog', channel: discord.TextChannel) -> Non
     
     # 議論終了の待機ループ
     while True:
-        try:
-            # スキップボタンまたはタイムアウトを待つ
-            await asyncio.wait_for(view.skip_event.wait(), timeout=view.remaining_time)
-            break
-        except asyncio.TimeoutError:
-            # タイムアウト時に延長イベントがセットされていたら、時間を足してループを継続
-            if view.extended and view.extend_event.is_set():
-                view.remaining_time = 60.0
-                view.extend_event.clear()
-                continue
+        remaining = view.end_timestamp - time.time()
+        if remaining <= 0:
             break
 
-    await channels.mute_all_alive_players(mute_status=True)
+        # スキップまたは延長イベントを待機
+        skip_task = asyncio.create_task(view.skip_event.wait())
+        extend_task = asyncio.create_task(view.extend_event.wait())
+
+        done, pending = await asyncio.wait(
+            [skip_task, extend_task],
+            timeout=remaining,
+            return_when=asyncio.FIRST_COMPLETED
+        )
+
+        for t in pending:
+            t.cancel()
+
+        if view.skip_event.is_set():
+            break
+        if view.extend_event.is_set():
+            view.extend_event.clear()
+            continue # 延長された終了時刻でループを再開
+        if not done: # タイムアウト
+            break
+
+    await channels.mute_all_alive_players(channel.guild, mute_status=True)
     # 昼フェーズ後に沈黙の呪いをクリア（翌昼には効果がなくなる）
     game.silenced_players.clear()
     # 狂人の混乱効果もクリア

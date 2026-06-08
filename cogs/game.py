@@ -1,7 +1,7 @@
 import discord, json, os
 from discord.ext import commands
 
-from config import get_game
+from config import get_game, get_leaderboard
 from views import RecruitView
 import channels
 
@@ -54,6 +54,37 @@ class GameCog(commands.Cog):
         
         game.load_from_dict(data, ctx.guild)
         await ctx.send(f"✅ {game.day_count}日目の状態からゲームを復旧しました。")
+
+    @commands.command(name="game_stats")
+    async def game_stats(self, ctx):
+        """通算勝利数ランキングを表示する"""
+        stats = get_leaderboard(ctx.guild.id)
+        if not stats:
+            return await ctx.send("📊 まだ統計データがありません。ゲームを完了させてください！")
+
+        # スコア順にソート
+        # (村人勝 + 人狼勝 + SK勝) の合計が多い順
+        sorted_stats = sorted(
+            stats.items(), 
+            key=lambda x: (x[1].get("human_win", 0) + x[1].get("wolf_win", 0) + x[1].get("sk_win", 0)), 
+            reverse=True
+        )
+        
+        embed = discord.Embed(title="🏆 人狼ゲーム 通算戦績ランキング", color=discord.Color.gold())
+        ranking_text = ""
+        for i, (uid_str, s) in enumerate(sorted_stats[:10], 1): # 上位10名
+            member = ctx.guild.get_member(int(uid_str))
+            name = member.display_name if member else f"退会したユーザー({uid_str})"
+            
+            total_wins = s["human_win"] + s["wolf_win"] + s["sk_win"]
+            survive_rate = (s["survived_count"] / s["total"] * 100) if s["total"] > 0 else 0
+            
+            ranking_text += (f"{i}位: **{name}**\n"
+                            f"　 🏆計{total_wins}勝 (村:{s['human_win']} 狼:{s['wolf_win']} SK:{s['sk_win']})\n"
+                            f"　 📈生存率: {survive_rate:.1f}% ({s['total']}戦)\n")
+        
+        embed.description = ranking_text
+        await ctx.send(embed=embed)
 
     # 分割したメソッドをバインド
     execute_game_start = execute_game_start

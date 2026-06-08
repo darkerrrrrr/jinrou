@@ -31,6 +31,7 @@ class WillNoteModal(discord.ui.Modal):
         game = get_game(interaction.guild.id)
         game.player_items[interaction.user.id] = "📝 遺言ノート"
         game.will_notes[interaction.user.id] = self.content.value
+        await game.save_state(interaction.guild) # 保存
         await interaction.response.send_message("✅ 遺言を書き残しました。人狼に殺害された場合のみ公開されます。", ephemeral=True)
 
 # 📢 拡声器をDMから直接使うためのView
@@ -121,6 +122,7 @@ class ItemDrawView(discord.ui.View):
         
         item_name = random.choice(list(ITEMS.keys()))
         game.player_items[user.id] = item_name
+        await game.save_state(interaction.guild) # アイテム確定時に保存
         game.check_night_actions_complete()
         
         if item_name == "📢 拡声器":

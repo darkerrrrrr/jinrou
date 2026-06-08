@@ -30,6 +30,7 @@ class WerewolfGame:
         self.wolf_channel: Optional[discord.TextChannel] = None     
         self.alive_vc: Optional[discord.VoiceChannel] = None         
         self.dead_vc: Optional[discord.VoiceChannel] = None          
+        self.data_channel: Optional[discord.TextChannel] = None      
         
         # 💡 アイテム（拡声器）の通知などを流すメインテキストチャンネルを記憶する変数
         self.text_channel: Optional[discord.TextChannel] = None
@@ -172,12 +173,21 @@ class WerewolfGame:
             "thief_action_done": self.thief_action_done
         }
 
-    def save_to_file(self, guild_id: int):
-        """状態をファイルに保存する"""
+    async def save_state(self, guild: discord.Guild):
+        """状態をファイルに保存し、さらにDiscordの隠しチャンネルにバックアップを送信する"""
+        guild_id = guild.id
         os.makedirs("data", exist_ok=True)
+        data_dict = self.to_dict()
         try:
             with open(f"data/game_{guild_id}.json", "w", encoding="utf-8") as f:
-                json.dump(self.to_dict(), f, ensure_ascii=False, indent=4)
+                json.dump(data_dict, f, ensure_ascii=False, indent=4)
+            
+            # Discordの隠しチャンネルにJSONファイルを送信（2000文字制限を回避するためファイル形式で送信）
+            if self.data_channel:
+                import io
+                json_str = json.dumps(data_dict, ensure_ascii=False, indent=2)
+                file = discord.File(io.StringIO(json_str), filename=f"state_{guild_id}_day{self.day_count}.json")
+                await self.data_channel.send(f"🔄 **自動セーブ：{self.day_count}日目**", file=file)
         except Exception as e:
             print(f"⚠️ 保存失敗: {e}")
 
@@ -242,3 +252,46 @@ def get_game(guild_id: int) -> WerewolfGame:
     if guild_id not in _guild_games:
         _guild_games[guild_id] = WerewolfGame()
     return _guild_games[guild_id]
+
+def update_leaderboard(guild_id: int, winner_ids: List[int], all_player_ids: List[int], survivor_ids: List[int], team_name: str):
+    """勝利したプレイヤーの統計を更新する"""
+    stats_path = f"data/stats_{guild_id}.json"
+    stats = {}
+    if os.path.exists(stats_path):
+        try:
+            with open(stats_path, "r", encoding="utf-8") as f:
+                stats = json.load(f)
+        except: stats = {}
+
+    # 全参加者の基本データを更新
+    for uid in all_player_ids:
+        uid_str = str(uid)
+        # 既存データがない場合は初期化
+        if uid_str not in stats:
+            stats[uid_str] = {"total": 0, "human_win": 0, "wolf_win": 0, "sk_win": 0, "survived_count": 0}
+        
+        user_stats = stats[uid_str]
+        user_stats["total"] += 1 # 参加回数
+
+        # 勝利記録
+        if uid in winner_ids:
+            if team_name == "人狼": user_stats["wolf_win"] += 1
+            elif team_name == "村人": user_stats["human_win"] += 1
+            elif team_name == "シリアルキラー": user_stats["sk_win"] += 1
+        
+        # 生存記録
+        if uid in survivor_ids:
+            user_stats["survived_count"] += 1
+            
+        stats[uid_str] = user_stats
+
+    os.makedirs("data", exist_ok=True)
+    with open(stats_path, "w", encoding="utf-8") as f:
+        json.dump(stats, f, ensure_ascii=False, indent=4)
+
+def get_leaderboard(guild_id: int) -> Dict[str, Any]:
+    """ランキングデータを取得する"""
+    stats_path = f"data/stats_{guild_id}.json"
+    if not os.path.exists(stats_path): return {}
+    with open(stats_path, "r", encoding="utf-8") as f:
+        return json.load(f)
