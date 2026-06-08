@@ -121,7 +121,14 @@ async def start_discussion(self: 'GameCog', channel: discord.TextChannel) -> Non
     # 終了時刻を計算してDiscordの相対タイムスタンプを作成
     end_timestamp = int(time.time() + game.discussion_time)
     
-    timer_msg = await channel.send(f"💬 昼の議論を開始します。議論終了まで： <t:{end_timestamp}:R>\n生存者の皆さんは話し合ってください！")
+    target_channel = game.progress_channel or channel
+
+    disc_embed = discord.Embed(
+        title="💬 昼の議論開始",
+        description=f"議論終了まで： <t:{end_timestamp}:R>\n生存者の皆さんは話し合ってください！",
+        color=discord.Color.light_grey()
+    )
+    timer_msg = await target_channel.send(embed=disc_embed)
     
     if game.log_channel:
         await game.log_channel.send("💬 昼の議論フェーズに入りました。")
@@ -140,7 +147,7 @@ async def start_discussion(self: 'GameCog', channel: discord.TextChannel) -> Non
             elif "時間延長" in str(item.label):
                 item.label = f"時間延長 (0/{needed})"
 
-    await channel.send("💡 議論を切り上げて投票に進むには、下のボタンを押してください（過半数の賛成が必要）。", view=view)
+    await target_channel.send("💡 議論を切り上げて投票に進むには、下のボタンを押してください（過半数の賛成が必要）。", view=view)
     
     # 議論終了の待機ループ
     while True:

@@ -27,8 +27,11 @@ async def start_night(self: 'GameCog', channel: discord.TextChannel) -> None:
     await channels.mute_all_alive_players(channel.guild, mute_status=True)
     
     game.event_log.append(f"═══ {game.day_count}日目：夜 ═══")
+    target_channel = game.progress_channel or channel # ここで定義
 
-    await channel.send("🌙 夜が訪れました。各役職者はDMで行動を選択してください。\n村人は明日の身支度（アイテム支給）を行ってください。")
+    # 説明文を削除し、タイトルのみでテンポを上げる
+    night_embed = discord.Embed(title=f"🌙 第{game.day_count}夜：行動フェーズ", description="各役職者はDMで行動を選択してください。\n村人は明日の身支度（アイテム支給）を行ってください。", color=discord.Color.dark_blue())
+    await target_channel.send(embed=night_embed)
     if game.log_channel:
         await game.log_channel.send("🌙 夜フェーズを開始しました。")
     await game.save_state(channel.guild)
@@ -195,7 +198,6 @@ async def process_night_results(self: 'GameCog', channel: discord.TextChannel) -
 
     game.last_executed = None 
 
-    await channel.send("☀️ 朝になりました。昨夜の行動結果を発表します。")
 
     # 【死亡者発表】
     if dead_list:
@@ -209,7 +211,7 @@ async def process_night_results(self: 'GameCog', channel: discord.TextChannel) -
             await channels.handle_player_death_vc(p, channel.guild)
         
         embed.description = f"❌ 昨夜の犠牲者: **{', '.join(names)}**"
-        await channel.send(embed=embed)
+        await target_channel.send(embed=embed)
         if game.log_channel:
             await game.log_channel.send(f"❌ 犠牲者: {', '.join(names)}")
         
@@ -223,12 +225,12 @@ async def process_night_results(self: 'GameCog', channel: discord.TextChannel) -
                     description=f"*{will_content}*",
                     color=discord.Color.light_grey()
                 )
-                await channel.send(embed=will_embed)
+                await target_channel.send(embed=will_embed)
                 use_player_item(channel.guild.id, player_id)
     else:
         embed = discord.Embed(title="☀️ 朝の結果発表", color=discord.Color.green())
         embed.description = "🛡️ 昨夜は誰も犠牲になりませんでした。"
-        await channel.send(embed=embed)
+        await target_channel.send(embed=embed)
         if game.log_channel:
             await game.log_channel.send("🛡️ 犠牲者なし")
 

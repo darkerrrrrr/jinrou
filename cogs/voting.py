@@ -18,8 +18,9 @@ async def start_voting(self: 'GameCog', channel: discord.TextChannel) -> None:
     """
     game = get_game(channel.guild.id)
     game.event_log.append(f"═══ {game.day_count}日目：投票 ═══")
+    target_channel = game.progress_channel or channel
 
-    await channel.send("🗳️ 生存者はメニューから本日追放するプレイヤーを1人選んで投票してください。")
+    await target_channel.send("🗳️ 生存者はメニューから本日追放するプレイヤーを1人選んで投票してください。")
     await game.save_state(channel.guild)
     if game.log_channel:
         await game.log_channel.send("🗳️ 投票フェーズに入りました。")
@@ -154,7 +155,7 @@ async def start_voting(self: 'GameCog', channel: discord.TextChannel) -> None:
     select_menu = VoteSelect(placeholder="追放するプレイヤーを選択...", options=select_options)
     view.add_item(select_menu)
     
-    vote_msg = await channel.send("👇 ここから投票してください", view=view)
+    vote_msg = await target_channel.send("👇 ここから投票してください", view=view)
     
     await view.wait()
     try:

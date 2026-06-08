@@ -26,28 +26,51 @@ async def create_game_channels(guild: discord.Guild) -> Optional[discord.Categor
             except Exception as e:
                 print(f"⚠️ 既存カテゴリー削除失敗: {e}")
     
-    category = await guild.create_category(category_name)
+    # カテゴリー自体をデフォルトで「全員非表示・接続不可」にする
+    category_overwrites = {
+        guild.default_role: discord.PermissionOverwrite(view_channel=False, connect=False)
+    }
+    category = await guild.create_category(category_name, overwrites=category_overwrites)
+
+    # 公開チャンネル（進行用など）のための権限
+    public_view = discord.PermissionOverwrite(view_channel=True)
+    public_vc = discord.PermissionOverwrite(view_channel=True, connect=True)
     
-    # サーバーの全員（@everyone）の初期権限設定
-    # テキスト用：見るのも読むのも禁止
-    text_lock = discord.PermissionOverwrite(read_messages=False, view_channel=False)
-    # ボイス用：見るのも入るのも禁止
-    vc_lock = discord.PermissionOverwrite(view_channel=False, connect=False)
-    
-    # 全員一律でロックをかける（@everyoneに対して適用）
-    overwrites_text = {guild.default_role: text_lock}
-    overwrites_vc = {guild.default_role: vc_lock}
-    
-    # 1. 人狼チャット（初期状態は全員ロック、あとから人狼だけ許可）
-    game.wolf_channel = await guild.create_text_channel("🐺人狼チャット", category=category, overwrites=overwrites_text)
+    # 0. ゲーム進行チャンネル（メインの舞台）
+    game.progress_channel = await guild.create_text_channel(
+        "📢ゲーム進行", 
+        category=category, 
+        overwrites={guild.default_role: public_view}
+    )
+
+    # 1. 人狼チャット（デフォルトで全員非表示）
+    wolf_overwrites = {
+        guild.default_role: discord.PermissionOverwrite(view_channel=False, send_messages=False),
+    }
+    game.wolf_channel = await guild.create_text_channel("🐺人狼チャット", category=category, overwrites=wolf_overwrites)
     
     # 2. ゲームログと生存者ボイス（これらは全員が見えたり入れたりしてOK）
-    game.log_channel = await guild.create_text_channel("📜ゲームログ", category=category)
-    game.alive_vc = await guild.create_voice_channel("🔊生存者村", category=category)
+    # ゲームログチャンネルはボット以外書き込み禁止にする
+    log_overwrites = {
+        guild.default_role: discord.PermissionOverwrite(view_channel=True, send_messages=False),
+    }
+    if guild.me:
+        log_overwrites[guild.me] = discord.PermissionOverwrite(send_messages=True)
+    game.log_channel = await guild.create_text_channel("📜ゲームログ", category=category, overwrites=log_overwrites)
     
-    # 3. 霊界・墓場（初期状態は全員ロック。生きてる人はチャンネルの存在すら見えません）
-    game.dead_channel = await guild.create_text_channel("👻墓場・霊界テキスト", category=category, overwrites=overwrites_text)
-    game.dead_vc = await guild.create_voice_channel("👻墓場・霊界", category=category, overwrites=overwrites_vc)
+    # 生存者村ボイスは見れるし入れるようにする
+    game.alive_vc = await guild.create_voice_channel(
+        "🔊生存者村", 
+        category=category, 
+        overwrites={guild.default_role: public_vc}
+    )
+    
+    # 3. 霊界・墓場（デフォルトで全員非表示）
+    dead_overwrites = {
+        guild.default_role: discord.PermissionOverwrite(view_channel=False, send_messages=False),
+    }
+    game.dead_channel = await guild.create_text_channel("👻墓場・霊界テキスト", category=category, overwrites=dead_overwrites)
+    game.dead_vc = await guild.create_voice_channel("👻墓場・霊界", category=category, overwrites=dead_overwrites)
     
     # 4. データ保持チャンネル（ボット自身のみが読み書き可能にする）
     data_overwrites = {guild.default_role: discord.PermissionOverwrite(view_channel=False)}

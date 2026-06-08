@@ -65,11 +65,20 @@ async def execute_game_start(self: 'GameCog', channel: discord.TextChannel) -> N
     for p, role in game.roles.items():
         try:
             msg = f"🔮 あなたの役職は 【**{role.name}**】 (陣営: {role.team}) です。"
+            
+            # ゲーム開始DMを送信
+            try:
+                await p.send("🎮 **人狼ゲームが開始されました！**\nあなたの役職DMをご確認ください。")
+            except Exception as e:
+                print(f"⚠️ {p.display_name} へのゲーム開始DM送信失敗: {e}")
+
+            # 役職DMを送信
             # 人狼同士の確認
             if role.name == RoleName.WOLF and len(werewolves) > 1:
                 partners = [w.display_name for w in werewolves if w != p]
                 msg += f"\n🐺 仲間の人狼: {', '.join(partners)}"
-            await p.send(msg)
+            dm_msg = await p.send(msg)
+            game.role_dm_messages[p.id] = dm_msg.id # DMメッセージIDを保存
         except Exception as e:
             err_msg = f"⚠️ {p.mention} への役職通知DM送信に失敗しました。設定を確認してください。"
             print(f"❌ {err_msg}: {e}")
@@ -89,17 +98,20 @@ async def execute_game_start(self: 'GameCog', channel: discord.TextChannel) -> N
     game.silenced_players.clear() # ミュートプレイヤーリストの初期化
     game.confused_players.clear() # 混乱プレイヤーリストの初期化
     
-    start_message = (
-        f"ゲームを開始しました。\n"
-        f"【テキスト】\n"
-        f"・人狼用: {game.wolf_channel.mention}\n"
-        f"・ログ用: {game.log_channel.mention}\n\n"
-        f"【ボイス】\n"
-        f"・生存者用: {game.alive_vc.mention}\n"
-        f"・墓場用: {game.dead_vc.mention}\n"
-        f"※プレイヤーは生存者ボイスチャンネルに移動してください。"
+    start_embed = discord.Embed(title="🎮 人狼ゲーム開始！", color=discord.Color.gold())
+    start_embed.description = (
+        "🚀 **ゲームが始まりました！**\n\n"
+        "各プレイヤーのDMに役職が通知されました。ご確認ください。\n\n"
+        f"【専用チャンネル】\n"
+        f"🐺 人狼用: {game.wolf_channel.mention}\n"
+        f"📜 ログ用: {game.log_channel.mention}\n\n"
+        "【ボイスチャンネル】\n"
+        f"🔊 生存者: {game.alive_vc.mention}\n"
+        f"👻 墓場: {game.dead_vc.mention}\n"
     )
-    await channel.send(start_message)
+    start_embed.set_footer(text="※プレイヤーは生存者ボイスチャンネルに移動してください。\n夜フェーズに入ると、DMで行動を促されます。")
+    
+    await channel.send(embed=start_embed)
     await game.log_channel.send("─── ゲームログの記録を開始しました ───")
     
     await game.save_state(channel.guild)
@@ -190,5 +202,77 @@ async def check_game_over(self: 'GameCog', channel: discord.TextChannel) -> bool
         await channel.send(embed=embed, file=file)
         await game.log_channel.send(f"🏁 ゲームが終了しました。結果: {victory_message}")
         await game.log_channel.send("─── ゲームログの記録を終了しました ───")
+
+        # --- ゲーム終了後のクリーンアップ ---
+        # 1. 募集メッセージのViewを削除
+        if game.recruit_message:
+            try:
+                await game.recruit_message.edit(view=None)
+            except Exception as e:
+                print(f"⚠️ 募集メッセージのView削除失敗: {e}")
+
+        # 2. 作成したチャンネルとカテゴリを削除
+        channels_to_delete = []
+        category_to_delete = None
+
+        # いずれかのチャンネルからカテゴリを取得
+        if game.progress_channel:
+            if game.progress_channel.category:
+                category_to_delete = game.progress_channel.category
+            channels_to_delete.append(game.progress_channel)
+        if game.wolf_channel: channels_to_delete.append(game.wolf_channel)
+        if game.log_channel: channels_to_delete.append(game.log_channel)
+        if game.dead_channel: channels_to_delete.append(game.dead_channel)
+        if game.alive_vc: channels_to_delete.append(game.alive_vc)
+        if game.dead_vc: channels_to_delete.append(game.dead_vc)
+        if game.data_channel: channels_to_delete.append(game.data_channel)
+
+        # カテゴリがあればカテゴリごと削除（最も効率的）
+        if category_to_delete:
+            try:
+                # カテゴリ内の全チャンネルを削除してからカテゴリを削除
+                await asyncio.gather(*[c.delete() for c in category_to_delete.channels])
+                await category_to_delete.delete()
+                print(f"✅ カテゴリ '{category_to_delete.name}' とその中のチャンネルを削除しました。")
+            except Exception as e:
+                print(f"⚠️ カテゴリ '{category_to_delete.name}' 削除失敗: {e}。個別のチャンネル削除を試みます。")
+                # カテゴリ削除失敗時は個別に削除を試みる
+                for ch in channels_to_delete:
+                    if ch:
+                        try:
+                            await ch.delete()
+                        except Exception as e_ch:
+                            print(f"⚠️ チャンネル '{ch.name}' 削除失敗: {e_ch}")
+        else:
+            # カテゴリが特定できない場合は個別に削除
+            for ch in channels_to_delete:
+                if ch:
+                    try:
+                        await ch.delete()
+                    except Exception as e_ch:
+                        print(f"⚠️ チャンネル '{ch.name}' 削除失敗: {e_ch}")
+
+        # 3. gameオブジェクトのチャンネル参照をクリア (reset_stateで大部分はクリアされるが念のため)
+        game.progress_channel = None
+        game.wolf_channel = None
+        game.log_channel = None
+        game.dead_channel = None
+        game.alive_vc = None
+        game.dead_vc = None
+        game.data_channel = None
+        game.recruit_message = None # メッセージ参照もクリア
+
+        # 4. gameオブジェクトの状態をリセット
+        # 5. DMで送った役職通知メッセージを削除
+        for player_id, msg_id in game.role_dm_messages.items():
+            player = channel.guild.get_member(player_id)
+            if player:
+                try:
+                    dm_channel = await player.create_dm()
+                    msg = await dm_channel.fetch_message(msg_id)
+                    await msg.delete()
+                except Exception as e:
+                    print(f"⚠️ {player.display_name} の役職通知DM削除失敗: {e}")
+        game.reset_state()
         return True
     return False

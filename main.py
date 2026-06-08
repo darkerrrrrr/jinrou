@@ -14,12 +14,9 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 @bot.event
 async def setup_hook(): 
+    # GameCog だけをロードすれば、他のフェーズ（phases, night等）の関数は
+    # GameCog クラスにバインドされているため、個別にロードする必要はありません。
     await bot.load_extension("cogs.game")
-    await bot.load_extension("cogs.item")
-    await bot.load_extension("cogs.phases")
-    await bot.load_extension("cogs.discussion")
-    await bot.load_extension("cogs.voting")
-    await bot.load_extension("cogs.night")
 
 @bot.event
 async def on_ready():

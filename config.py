@@ -31,6 +31,7 @@ class WerewolfGame:
         self.alive_vc: Optional[discord.VoiceChannel] = None         
         self.dead_vc: Optional[discord.VoiceChannel] = None          
         self.data_channel: Optional[discord.TextChannel] = None      
+        self.progress_channel: Optional[discord.TextChannel] = None  
         
         # 💡 アイテム（拡声器）の通知などを流すメインテキストチャンネルを記憶する変数
         self.text_channel: Optional[discord.TextChannel] = None
