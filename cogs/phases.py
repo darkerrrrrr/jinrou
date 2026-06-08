@@ -1,6 +1,9 @@
 import discord, random
-from config import game
+from config import game, RoleName
 import channels
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from cogs.game import GameCog
 
 # 役職インポート
 from roles.werewolf import Werewolf
@@ -16,10 +19,10 @@ from roles.villager import Villager
 from cogs.item import reset_items
 
 async def setup(bot):
-    pass
+    pass # GameCogは cogs/game.py で登録されるため、ここでは何もしない
 
 
-async def execute_game_start(self, channel: discord.TextChannel) -> None:
+async def execute_game_start(self: 'GameCog', channel: discord.TextChannel) -> None:
     """
     ゲーム開始時の役職配置と初期化を行う
     
@@ -27,19 +30,29 @@ async def execute_game_start(self, channel: discord.TextChannel) -> None:
         channel: メインチャンネル
     """
     role_map = {
-        "人狼": Werewolf, 
-        "占い師": Seer, 
-        "霊媒師": Medium, 
-        "狩人": Hunter, 
-        "怪盗": Thief, 
-        "狂人": Madman, 
-        "シリアルキラー": SerialKiller, 
-        "村人": Villager
+        RoleName.WOLF: Werewolf, 
+        RoleName.SEER: Seer, 
+        RoleName.MEDIUM: Medium, 
+        RoleName.HUNTER: Hunter, 
+        RoleName.THIEF: Thief, 
+        RoleName.MADMAN: Madman, 
+        RoleName.SK: SerialKiller, 
+        RoleName.VILLAGER: Villager
     }
+    
+    # 設定された役職をリスト化
     deck = [role_map[n]() for n, c in game.role_settings.items() for _ in range(c)]
     
-    while len(deck) < len(game.players): 
-        deck.append(Villager())
+    # 参加人数に合わせて調整
+    if len(deck) > len(game.players):
+        # 設定枚数が多い場合はランダムに削る
+        random.shuffle(deck)
+        deck = deck[:len(game.players)]
+    elif len(deck) < len(game.players): 
+        # 足りない分を村人で埋める
+        for _ in range(len(game.players) - len(deck)):
+            deck.append(Villager())
+    
     random.shuffle(deck)
     
     game.roles = {p: deck[i] for i, p in enumerate(game.players)}
@@ -47,11 +60,20 @@ async def execute_game_start(self, channel: discord.TextChannel) -> None:
         role.player = p
     
     # 全プレイヤーに役職を通知
+    werewolves = [p for p, r in game.roles.items() if r.name == RoleName.WOLF]
     for p, role in game.roles.items():
         try:
-            await p.send(f"🔮 あなたの役職は 【**{role.name}**】 (陣営: {role.team}) です。")
+            msg = f"🔮 あなたの役職は 【**{role.name}**】 (陣営: {role.team}) です。"
+            # 人狼同士の確認
+            if role.name == RoleName.WOLF and len(werewolves) > 1:
+                partners = [w.display_name for w in werewolves if w != p]
+                msg += f"\n🐺 仲間の人狼: {', '.join(partners)}"
+            await p.send(msg)
         except Exception as e:
-            print(f"❌ {p.display_name} へのDM送信に失敗: {e}")
+            err_msg = f"⚠️ {p.mention} への役職通知DM送信に失敗しました。設定を確認してください。"
+            print(f"❌ {err_msg}: {e}")
+            if game.log_channel:
+                await game.log_channel.send(err_msg)
     
     # ゲームチャンネルを生成
     await channels.create_game_channels(channel.guild)
@@ -82,7 +104,7 @@ async def execute_game_start(self, channel: discord.TextChannel) -> None:
     await self.start_night(channel)
 
 
-async def check_game_over(self, channel: discord.TextChannel) -> bool:
+async def check_game_over(self: 'GameCog', channel: discord.TextChannel) -> bool:
     """
     勝利条件をチェックし、ゲーム終了処理を行う
     

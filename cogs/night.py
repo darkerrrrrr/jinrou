@@ -1,12 +1,15 @@
 import discord, asyncio
-from config import game
+from config import game, RoleName
 from actions import ActionView
 import channels
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from cogs.game import GameCog
 
 # アイテムシステム関連
 from cogs.item import reset_items, ItemDrawView, get_player_item, use_player_item
 
-async def start_night(self, channel: discord.TextChannel) -> None:
+async def start_night(self: 'GameCog', channel: discord.TextChannel) -> None:
     """
     夜フェーズを開始する
     
@@ -14,53 +17,78 @@ async def start_night(self, channel: discord.TextChannel) -> None:
         channel: メインチャンネル
     """
     game.actions = {}
-    await channel.send("🌙 夜になりました。各役職はDMでアクションを選択してください。")
-    await game.log_channel.send("🌙 夜フェーズに入りました。")
+    game.night_skip_event.clear()
     
-    # 毎晩の最初に、前夜に引いたアイテムデータをリセット（ただし怪盗の役職交換後のアイテムは保持）
-    # 新しく村人だけがアイテムを引くので、既に持ってるアイテムはそのまま
-    new_items = {}
-    for player_id, item in game.player_items.items():
-        # 死んだ人のアイテムは削除、生きてる人は保持
-        if any(p.id == player_id for p in game.alive_players):
-            new_items[player_id] = item
-    game.player_items.clear()
-    game.player_items.update(new_items)
+    # 死亡したプレイヤーのアイテムを削除
+    alive_ids = {p.id for p in game.alive_players}
+    game.player_items = {uid: item for uid, item in game.player_items.items() if uid in alive_ids}
     
     await channels.mute_all_alive_players(mute_status=True)
     
-    await channel.send("🌙 夜が訪れました。各役職者は行動を、村人は明日の身支度（アイテム支給）を行ってください。")
-    await game.log_channel.send("🌙 夜フェーズに移行しました。")
+    await channel.send("🌙 夜が訪れました。各役職者はDMで行動を選択してください。\n村人は明日の身支度（アイテム支給）を行ってください。")
+    if game.log_channel:
+        await game.log_channel.send("🌙 夜フェーズを開始しました。")
     
     for player, role in game.roles.items():
         if player not in game.alive_players: 
             continue
+            
+        # 霊媒師への自動通知（前日に処刑された人がいる場合）
+        if role.name == RoleName.MEDIUM:
+            if game.last_executed:
+                actual_role = game.roles.get(game.last_executed)
+                result_team = "人狼" if (actual_role and actual_role.name == RoleName.WOLF) else "人間"
+                try:
+                    await player.send(f"👻 【霊媒結果】: 昨日追放された {game.last_executed.display_name} は 【**{result_team}**】 でした。")
+                except: pass
+            else:
+                try:
+                    await player.send("👻 【霊媒結果】: 昨日追放された人はいませんでした。")
+                except: pass
         
         label = role.get_action_label()
         if label:
             try:
-                await player.send(f"【{role.name}】の能力発動時刻です。今夜の「{label}」対象者を選んでください。", view=ActionView(player, label))
+                view = ActionView(player, label, timeout=game.night_time)
+                msg = await player.send(f"【{role.name}】の能力発動時刻です。今夜の「{label}」対象者を選んでください。", view=view)
+                view.message = msg # タイムアウト時にメッセージを編集できるように保持
             except Exception as e:
                 print(f"⚠️ {player.display_name} ({role.name}) への能力通知DM失敗: {e}")
-        elif role.name == "村人":
+                if game.log_channel:
+                    await game.log_channel.send(f"⚠️ {player.mention} ({role.name}) へのDM送信に失敗しました。")
+                # DM失敗時は「行動なし」として登録し、進行を妨げないようにする
+                game.actions[player] = {"action": "skipped", "target": None}
+                game.check_night_actions_complete()
+        elif role.name == RoleName.VILLAGER:
             # 普通の村人のみにアイテム支給ガチャボタンを送信
             try:
-                await player.send("🎒 **【夜間の身支度】** 明日の過酷な議論に備え、手荷物を確認しましょう。下のボタンからアイテムを1つ獲得できます。", view=ItemDrawView())
+                await player.send("🎒 **【夜間の身支度】** 明日の過酷な議論に備え、手荷物を確認しましょう。下のボタンからアイテムを1つ獲得できます。", view=ItemDrawView(timeout=game.night_time))
             except Exception as e:
                 print(f"⚠️ {player.display_name} へのアイテムガチャDM失敗: {e}")
+                if game.log_channel:
+                    await game.log_channel.send(f"⚠️ {player.mention} へのアイテムガチャDMに失敗しました。")
+                # DM失敗時はダミーアイテムを登録して進行を妨げないようにする
+                game.player_items[player.id] = "❌ 準備失敗"
+                game.check_night_actions_complete()
                 
-    await asyncio.sleep(game.night_time)
-    await process_night_results(self, channel)
+    # 固定時間の待機ではなく、全員完了またはタイムアウトまで待機
+    try:
+        await asyncio.wait_for(game.night_skip_event.wait(), timeout=game.night_time)
+    except asyncio.TimeoutError:
+        pass
+
+    await self.process_night_results(channel)
 
 
-async def process_night_results(self, channel: discord.TextChannel) -> None:
+async def process_night_results(self: 'GameCog', channel: discord.TextChannel) -> None:
     """
     夜の行動結果を処理する
     
     Args:
         channel: メインチャンネル
     """
-    await game.log_channel.send("☀️ 朝フェーズになり、夜の行動結果を処理しています。")
+    if game.log_channel:
+        await game.log_channel.send("☀️ 朝フェーズになり、夜の行動結果を処理しています。")
     
     # 【怪盗の強奪処理】
     thief_target = None
@@ -75,73 +103,68 @@ async def process_night_results(self, channel: discord.TextChannel) -> None:
                     game.roles[actor], game.roles[target] = target_role, actor_role
                     game.roles[actor].player = actor
                     game.roles[target].player = target
+                    
+                    # 【拡張】アイテムも完全に入れ替える
+                    actor_item = game.player_items.pop(actor.id, None)
+                    target_item = game.player_items.pop(target.id, None)
+                    if target_item: game.player_items[actor.id] = target_item
+                    if actor_item: game.player_items[target.id] = actor_item
+
+                    # もし人狼を奪った場合、人狼チャットを見れるように権限を更新
+                    if target_role.name == RoleName.WOLF:
+                        await channels.setup_wolf_permissions()
+
                     try:
                         await actor.send(f"🎭 【怪盗の強奪結果】: {target.display_name} から役職を奪いました！あなたの新しい役職は 【**{target_role.name}**】 です。")
                     except Exception as e:
                         print(f"⚠️ {actor.display_name} (怪盗) への結果通知DM失敗: {e}")
         game.thief_action_done = True
 
-    # 【占い師の結果通知】
+    # 【役職ごとのアクション結果通知と集計】
+    attacked_targets = set()
+    guarded_targets = set()
+
     for actor, data in game.actions.items():
-        if data['action'] == "占い" and actor in game.alive_players:
-            target = data['target']
+        if actor not in game.alive_players: continue
+            
+        action = data.get('action')
+        target = data.get('target')
+        if not target: continue
+
+        # 生存確認
+        if target not in game.alive_players and action != "強奪": continue # 死亡者へのアクションは基本無効
+
+        if action == "占い":
             actual_role = game.roles.get(target)
-            result_team = "人狼" if (actual_role and actual_role.name == "人狼") else "人間"
+            result_team = "人狼" if (actual_role and actual_role.name == RoleName.WOLF) else "人間"
             try:
                 await actor.send(f"🔮 【占い結果】: {target.display_name} を占いました。結果は 【**{result_team}**】 です。")
             except Exception as e:
                 print(f"⚠️ {actor.display_name} (占い師) への占い結果通知DM失敗: {e}")
-
-    # 【霊媒師の結果通知】
-    for actor, data in game.actions.items():
-        if data['action'] == "霊媒" and actor in game.alive_players:
-            target = data['target']
-            actual_role = game.roles.get(target)
-            result_team = "人狼" if (actual_role and actual_role.name == "人狼") else "人間"
-            try:
-                await actor.send(f"👻 【霊媒結果】: {target.display_name} を霊視しました。正体は 【**{result_team}**】 です。")
-            except Exception as e:
-                print(f"⚠️ {actor.display_name} (霊媒師) への霊媒結果通知DM失敗: {e}")
-
-    # 【狂人の混乱処理】
-    for actor, data in game.actions.items():
-        if data['action'] == "混乱" and actor in game.alive_players:
-            target = data['target']
-            if target in game.alive_players:
-                game.confused_players.add(target.id)
+        elif action == "混乱":
+            game.confused_players.add(target.id)
+            if game.log_channel:
                 await game.log_channel.send(f"🌀 {actor.display_name} が {target.display_name} を混乱させました。")
-                try:
-                    await actor.send(f"🌀 【混乱成功】: {target.display_name} を混乱させました。明日の投票で彼の投票先がランダムになります。")
-                except Exception as e:
-                    print(f"⚠️ {actor.display_name} (狂人) への混乱結果通知DM失敗: {e}")
-
-    # 【襲撃対象の集計】
-    guarded_players = [data['target'] for actor, data in game.actions.items() if data['action'] == "護衛" and actor in game.alive_players]
-    attacked_targets = []
-    
-    for actor, data in game.actions.items():
-        if data['action'] == "襲撃" and actor in game.alive_players:
-            if data['target'] not in attacked_targets:
-                attacked_targets.append(data['target'])
-                
-    for actor, data in game.actions.items():
-        if data['action'] == "殺害" and actor in game.alive_players:
-            if data['target'] not in attacked_targets:
-                attacked_targets.append(data['target'])
+            try:
+                await actor.send(f"🌀 【混乱成功】: {target.display_name} を混乱させました。")
+            except: pass
+        elif action == "護衛":
+                guarded_targets.add(target)
+        elif action in ["襲撃", "殺害"]:
+                attacked_targets.add(target)
 
     # 【死亡判定】
     dead_list = []
-    guarded_and_notified = set()
     for target in attacked_targets:
-        if target in guarded_players:
-            if target not in guarded_and_notified:
-                await game.log_channel.send(f"🛡️ 狩人の護衛成功！ {target.display_name} への襲撃が阻止されました。")
-                guarded_and_notified.add(target)
+        if target in guarded_targets:
+            if game.log_channel:
+                await game.log_channel.send(f"🛡️ 護衛成功！ {target.display_name} への襲撃が阻止されました。")
         else:
             if target in game.alive_players:
                 # 【アイテム効果】お守りを持っていれば、身代わりにして襲撃を耐える
                 if get_player_item(target.id) == "🛡️ お守り":
-                    await game.log_channel.send(f"✨ {target.display_name} は懐の「お守り」が身代わりとなり、人狼の襲撃を耐え抜いた！")
+                    if game.log_channel:
+                        await game.log_channel.send(f"✨ {target.display_name} は懐の「お守り」が身代わりとなり、人狼の襲撃を耐え抜いた！")
                     use_player_item(target.id) 
                     continue
                 
@@ -150,28 +173,41 @@ async def process_night_results(self, channel: discord.TextChannel) -> None:
     game.last_executed = None 
 
     await channel.send("☀️ 朝になりました。昨夜の行動結果を発表します。")
-    await asyncio.sleep(2)
 
     # 【死亡者発表】
     if dead_list:
+        await asyncio.sleep(2) # 犠牲者がいる場合のみタメを作る
+        embed = discord.Embed(title="☀️ 朝の結果発表", color=discord.Color.red())
+        names = []
         for p in dead_list:
             if p in game.alive_players: 
                 game.alive_players.remove(p)
+            names.append(p.display_name)
             await channels.handle_player_death_vc(p)
         
-        result_str = "昨夜の犠牲者: " + ", ".join([p.display_name for p in dead_list])
-        await channel.send(f"❌ {result_str}")
-        await game.log_channel.send(f"❌ 犠牲者: {result_str}")
+        embed.description = f"❌ 昨夜の犠牲者: **{', '.join(names)}**"
+        await channel.send(embed=embed)
+        if game.log_channel:
+            await game.log_channel.send(f"❌ 犠牲者: {', '.join(names)}")
         
         # 【アイテム効果】死んだ人が「遺言ノート」を持っていたら自動発動
         for p in dead_list:
-            if get_player_item(p.id) == "📝 遺言ノート":
-                await channel.send(f"📖 **{p.display_name}の遺言ノートが見つかりました：**\n*「私が死んだということは、人狼はあいつか……？ 村の皆、仇を取ってくれ……！」*")
-                use_player_item(p.id)
+            player_id = p.id
+            if get_player_item(player_id) == "📝 遺言ノート":
+                will_content = game.will_notes.get(player_id, "（何も書かれていなかった...）")
+                will_embed = discord.Embed(
+                    title=f"📖 {p.display_name}の遺言",
+                    description=f"*{will_content}*",
+                    color=discord.Color.light_grey()
+                )
+                await channel.send(embed=will_embed)
+                use_player_item(player_id)
     else:
-        msg = "昨夜は誰も犠牲になりませんでした。"
-        await channel.send(f"🛡️ {msg}")
-        await game.log_channel.send(f"🛡️ {msg}")
+        embed = discord.Embed(title="☀️ 朝の結果発表", color=discord.Color.green())
+        embed.description = "🛡️ 昨夜は誰も犠牲になりませんでした。"
+        await channel.send(embed=embed)
+        if game.log_channel:
+            await game.log_channel.send("🛡️ 犠牲者なし")
 
     if await self.check_game_over(channel): 
         return

@@ -1,5 +1,10 @@
 import discord
-from config import game
+from config import game, RoleName
+from discord.ext import commands
+from typing import TYPE_CHECKING, cast
+
+if TYPE_CHECKING:
+    from cogs.game import GameCog
 
 class RecruitView(discord.ui.View):
     def __init__(self): 
@@ -26,28 +31,42 @@ class RecruitView(discord.ui.View):
 
     @discord.ui.button(label="⏱️ 時間設定", style=discord.ButtonStyle.secondary, custom_id="settings_btn")
     async def settings(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user != game.host: return await interaction.response.send_message("主催者のみ可能です。", ephemeral=True)
+        if not game.host or interaction.user.id != game.host.id: 
+            return await interaction.response.send_message("主催者のみ可能です。", ephemeral=True)
         await interaction.response.send_modal(TimeSettingModal(parent_view=self))
 
     @discord.ui.button(label="👥 役職設定", style=discord.ButtonStyle.primary, custom_id="roles_btn")
     async def role_settings(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user != game.host: return await interaction.response.send_message("主催者のみ可能です。", ephemeral=True)
+        if not game.host or interaction.user.id != game.host.id: 
+            return await interaction.response.send_message("主催者のみ可能です。", ephemeral=True)
         await interaction.response.send_message("役職変更:", view=RoleSettingView(), ephemeral=True)
 
     @discord.ui.button(label="▶ ゲーム開始", style=discord.ButtonStyle.blurple, custom_id="start_btn")
     async def start(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user != game.host: return await interaction.response.send_message("主催者のみ可能です。", ephemeral=True)
+        if not game.host or interaction.user.id != game.host.id: 
+            return await interaction.response.send_message("主催者のみ可能です。", ephemeral=True)
         if len(game.players) < 3: return await interaction.response.send_message("3人以上で開始してください。", ephemeral=True)
-        await interaction.response.send_message("ゲームを開始します！")
-        cog = interaction.client.get_cog("GameCog")
-        if cog: await cog.execute_game_start(interaction.channel)
+        
+        channel = interaction.channel
+        if not isinstance(channel, (discord.TextChannel, discord.Thread)):
+            return await interaction.response.send_message("エラー: チャンネル情報を取得できませんでした。", ephemeral=True)
 
-class TimeSettingModal(discord.ui.Modal, title='ゲーム時間の設定'):
+        await interaction.response.send_message("ゲームを開始します！")
+        
+        bot = cast(commands.Bot, interaction.client)
+        cog = bot.get_cog("GameCog")
+        if cog:
+            # 動的な代入のため getattr を使用しつつ、エラーを抑止
+            func = getattr(cog, "execute_game_start", None)
+            if func:
+                await func(channel)
+
+class TimeSettingModal(discord.ui.Modal):
     discussion_input = discord.ui.TextInput(label='昼の議論時間 (秒)', default='180', max_length=4)
     night_input = discord.ui.TextInput(label='夜の行動時間 (秒)', default='60', max_length=4)
     morning_input = discord.ui.TextInput(label='朝の結果発表時間 (秒)', default='15', max_length=4)
     def __init__(self, parent_view):
-        super().__init__()
+        super().__init__(title='ゲーム時間の設定')
         self.parent_view = parent_view
     async def on_submit(self, interaction: discord.Interaction):
         try:
@@ -75,11 +94,12 @@ class RoleCountSelect(discord.ui.Select):
     def __init__(self, selected_role):
         self.selected_role = selected_role
         current = game.role_settings[selected_role]
-        limited = ["シリアルキラー", "怪盗", "占い師", "狩人", "狂人", "霊媒師"]
+        limited = [RoleName.SK, RoleName.THIEF, RoleName.SEER, RoleName.HUNTER, RoleName.MADMAN, RoleName.MEDIUM]
         limit = 2 if selected_role in limited else 4
         # 0枚から始める（役職なしも選択可能）
         options = [discord.SelectOption(label=f"{i}枚", value=str(i), default=(current == i)) for i in range(0, limit + 1)]
         super().__init__(placeholder=f"【{selected_role}】の枚数を選択", options=options)
+
     async def callback(self, interaction: discord.Interaction):
         game.role_settings[self.selected_role] = int(self.values[0])
         if game.recruit_message: await game.recruit_message.edit(embed=RecruitView().create_recruit_embed(), view=RecruitView())
@@ -99,6 +119,6 @@ class RoleSettingView(discord.ui.View):
         super().__init__(timeout=60)
         self.add_item(RoleSelectMenu())
         close_btn = discord.ui.Button(label="設定完了", style=discord.ButtonStyle.secondary)
-        async def close_callback(interaction): await interaction.response.edit_message(content="完了しました。", view=None)
+        async def close_callback(interaction: discord.Interaction): await interaction.response.edit_message(content="完了しました。", view=None)
         close_btn.callback = close_callback
         self.add_item(close_btn)

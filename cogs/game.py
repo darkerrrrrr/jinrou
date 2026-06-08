@@ -31,20 +31,10 @@ class GameCog(commands.Cog):
     # 💡 コマンド名を「game_setup」に変更し、Discord.pyのシステム用setup関数との衝突を防止
     # サーバー上での入力は「!game_setup」になります
     @commands.command(name="game_setup")
+    @commands.has_permissions(administrator=True)
     async def game_setup(self, ctx):
-        game.is_playing = False
-        game.players = []            
-        game.roles = {}              
-        game.alive_players = []      
-        game.actions = {}
-        game.last_executed = None
-        game.last_executed_role_name = None
-        game.thief_action_done = False
-        game.recruit_message = None
-        game.player_items.clear()
-        game.silenced_players.clear()
-        game.confused_players.clear()
-
+        game.reset_state()
+        game.text_channel = ctx.channel
         game.host = ctx.author
         view = RecruitView()
         game.recruit_message = await ctx.send(embed=view.create_recruit_embed(), view=view)
