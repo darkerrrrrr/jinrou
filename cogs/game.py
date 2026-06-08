@@ -87,6 +87,7 @@ class GameCog(commands.Cog):
         await ctx.send(embed=embed)
 
     @commands.command(name="msgdel")
+    @commands.guild_only()
     async def msgdel(self, ctx, amount: int):
         """指定した件数のメッセージを削除します。例: !msgdel 10"""
         game = get_game(ctx.guild.id)
@@ -105,7 +106,11 @@ class GameCog(commands.Cog):
     @msgdel.error
     async def msgdel_error(self, ctx, error):
         """msgdelコマンド専用のエラーハンドリング"""
-        if isinstance(error, commands.MissingPermissions):
+        if isinstance(error, commands.NoPrivateMessage):
+            await ctx.send("❌ このコマンドはサーバー内でのみ使用できます。", delete_after=5)
+        elif isinstance(error, commands.MissingRequiredArgument):
+            await ctx.send("❌ 削除する件数を指定してください。例: !msgdel 10", delete_after=5)
+        elif isinstance(error, commands.MissingPermissions):
             await ctx.send("❌ あなたには「メッセージの管理」権限がないため、このコマンドは実行できません。", delete_after=5)
         elif isinstance(error, commands.BadArgument):
             await ctx.send("❌ 削除する件数は数字で指定してください。例: !msgdel 10", delete_after=5)
