@@ -43,6 +43,7 @@ class GameCog(commands.Cog):
         game.recruit_message = None
         game.player_items.clear()
         game.silenced_players.clear()
+        game.confused_players.clear()
 
         game.host = ctx.author
         view = RecruitView()

@@ -94,6 +94,14 @@ async def start_voting(self, channel: discord.TextChannel) -> None:
             # 疑惑の劇薬を使ったかチェック（アイテムがもう削除されているので、player_itemで判定）
             vote_power = 2 if player_item == "🧪 疑惑の劇薬" else 1
             
+            # 【狂人の混乱効果】混乱状態のプレイヤーは投票先がランダムになる
+            if interaction.user.id in game.confused_players:
+                import random
+                random_target = random.choice([p for p in game.alive_players if p != interaction.user])
+                target_id = random_target.id
+                target_member = random_target
+                await game.log_channel.send(f"🌀 {interaction.user.display_name} は混乱しており、投票先が {target_member.display_name} に変更されました。")
+            
             voted_users.add(interaction.user)
             votes[target_id] = votes.get(target_id, 0) + vote_power
             await interaction.followup.send(f"【{interaction.user.display_name}】さんが投票しました。", ephemeral=True)

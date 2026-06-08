@@ -36,6 +36,9 @@ class WerewolfGame:
         # アイテムシステム関連
         self.player_items: Dict[int, str] = {}  # {ユーザーid: "アイテム名"}
         self.silenced_players: Set[int] = set()  # 沈黙の御札でミュートされるプレイヤーID
+        
+        # 狂人の混乱効果
+        self.confused_players: Set[int] = set()  # 混乱させられたプレイヤーID（投票先がランダムになる）
 
     def check_victory(self) -> Optional[str]:
         """

@@ -35,7 +35,9 @@ async def start_discussion(self, channel: discord.TextChannel) -> None:
     
     await channels.mute_all_alive_players(mute_status=True)
     # 昼フェーズ後に沈黙の呪いをクリア（翌昼には効果がなくなる）
-    game.silenced_players.clear() 
+    game.silenced_players.clear()
+    # 狂人の混乱効果もクリア
+    game.confused_players.clear() 
 
     await channel.send("⏱️ 議論時間が終了しました。これより投票（処刑対象の選出）に移ります。")
     await self.start_voting(channel)

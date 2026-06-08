@@ -64,6 +64,7 @@ async def execute_game_start(self, channel: discord.TextChannel) -> None:
     # アイテム(拡声器など)が発動したときに全体通知を送るチャンネルを記憶
     game.text_channel = channel 
     game.silenced_players.clear() # ミュートプレイヤーリストの初期化
+    game.confused_players.clear() # 混乱プレイヤーリストの初期化
     
     start_message = (
         f"ゲームを開始しました。\n"

@@ -14,6 +14,8 @@ async def start_night(self, channel: discord.TextChannel) -> None:
         channel: メインチャンネル
     """
     game.actions = {}
+    await channel.send("🌙 夜になりました。各役職はDMでアクションを選択してください。")
+    await game.log_channel.send("🌙 夜フェーズに入りました。")
     
     # 毎晩の最初に、前夜に引いたアイテムデータをリセット（ただし怪盗の役職交換後のアイテムは保持）
     # 新しく村人だけがアイテムを引くので、既に持ってるアイテムはそのまま
@@ -100,6 +102,18 @@ async def process_night_results(self, channel: discord.TextChannel) -> None:
                 await actor.send(f"👻 【霊媒結果】: {target.display_name} を霊視しました。正体は 【**{result_team}**】 です。")
             except Exception as e:
                 print(f"⚠️ {actor.display_name} (霊媒師) への霊媒結果通知DM失敗: {e}")
+
+    # 【狂人の混乱処理】
+    for actor, data in game.actions.items():
+        if data['action'] == "混乱" and actor in game.alive_players:
+            target = data['target']
+            if target in game.alive_players:
+                game.confused_players.add(target.id)
+                await game.log_channel.send(f"🌀 {actor.display_name} が {target.display_name} を混乱させました。")
+                try:
+                    await actor.send(f"🌀 【混乱成功】: {target.display_name} を混乱させました。明日の投票で彼の投票先がランダムになります。")
+                except Exception as e:
+                    print(f"⚠️ {actor.display_name} (狂人) への混乱結果通知DM失敗: {e}")
 
     # 【襲撃対象の集計】
     guarded_players = [data['target'] for actor, data in game.actions.items() if data['action'] == "護衛" and actor in game.alive_players]
