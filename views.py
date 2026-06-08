@@ -51,7 +51,8 @@ class RecruitView(discord.ui.View):
         game = get_game(interaction.guild.id)
         if not game.host or interaction.user.id != game.host.id: 
             return await interaction.response.send_message("主催者のみ可能です。", ephemeral=True)
-        if len(game.players) < 3: return await interaction.response.send_message("3人以上で開始してください。", ephemeral=True)
+        # テストプレイ用に1人以上で開始可能に変更
+        if len(game.players) < 1: return await interaction.response.send_message("参加者がいないため開始できません。", ephemeral=True)
         
         channel = interaction.channel
         if not isinstance(channel, (discord.TextChannel, discord.Thread)):

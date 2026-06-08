@@ -105,7 +105,8 @@ async def start_voting(self: 'GameCog', channel: discord.TextChannel) -> None:
                 print(f"⚠️ プレイヤー取得失敗 (ID: {target_id}): {e}")
                 return await interaction.response.send_message("対象のプレイヤーが見つかりません。", ephemeral=True)
             
-            if target_member == voter:
+            # テストプレイ用に、1人だけの時は自分への投票を許可
+            if target_member == voter and len(game.alive_players) > 1:
                 return await interaction.response.send_message("自分自身には投票できません。", ephemeral=True)
 
             item_was_used = False

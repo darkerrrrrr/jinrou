@@ -14,9 +14,13 @@ class ActionSelect(discord.ui.Select):
         last_id = game.last_protected.get(actor.id)
         is_hunter = (game.roles.get(actor) and game.roles[actor].name == RoleName.HUNTER)
 
+        # テストプレイ用に、自分以外がいない場合は自分を選択肢に入れる（メニューが空になるのを防ぐ）
+        valid_targets = [p for p in game.alive_players if p != actor]
+        if not valid_targets: valid_targets = game.alive_players
+
         options = [
             discord.SelectOption(label=p.display_name, value=str(p.id)) 
-            for p in game.alive_players if p != actor and (not is_hunter or p.id != last_id)
+            for p in valid_targets if not is_hunter or p.id != last_id
         ]
         super().__init__(placeholder="対象のプレイヤーを選択...", options=options)
 
