@@ -15,12 +15,6 @@ class RecruitView(discord.ui.View):
         roles_text = "\n".join([f"・{k}: {v}枚" for k, v in game.role_settings.items() if v > 0])
         embed = discord.Embed(title="🐺 人狼ゲーム", color=discord.Color.dark_red())
         
-        guide_text = (
-            "🌙 **夜**: 役職者はDMで行動を選択。村人はアイテムガチャを引きます。\n"
-            "☀️ **朝**: 昨夜の行動結果（犠牲者など）を発表します。\n"
-            "💬 **昼**: 生存者全員で議論し、追放する人を選びます。"
-        )
-        embed.add_field(name="📜 ゲームの進め方", value=guide_text, inline=False)
         embed.add_field(name="👥 配役構成", value=roles_text if roles_text else "未設定")
         embed.add_field(name=f"🎮 参加者 ({len(game.players)}人)", value="\n".join([p.mention for p in game.players]) if game.players else "誰も参加していません。")
         return embed

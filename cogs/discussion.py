@@ -128,7 +128,11 @@ async def start_discussion(self: 'GameCog', channel: discord.TextChannel) -> Non
         description=f"議論終了まで： <t:{end_timestamp}:R>\n生存者の皆さんは話し合ってください！",
         color=discord.Color.light_grey()
     )
-    timer_msg = await target_channel.send(embed=disc_embed)
+    timer_msg = await target_channel.send(embed=disc_embed, silent=True)
+
+    # 霊界には議論開始を通知
+    if game.dead_channel:
+        await game.dead_channel.send("💬 昼の議論が始まりました。生存者の推理を聞いてみましょう。", silent=False)
     
     if game.log_channel:
         await game.log_channel.send("💬 昼の議論フェーズに入りました。")
@@ -147,7 +151,7 @@ async def start_discussion(self: 'GameCog', channel: discord.TextChannel) -> Non
             elif "時間延長" in str(item.label):
                 item.label = f"時間延長 (0/{needed})"
 
-    await target_channel.send("💡 議論を切り上げて投票に進むには、下のボタンを押してください（過半数の賛成が必要）。", view=view)
+    disc_control_msg = await target_channel.send("💡 議論を切り上げて投票に進むには、下のボタンを押してください（過半数の賛成が必要）。", view=view, silent=True)
     
     # 議論終了の待機ループ
     while True:
@@ -176,13 +180,18 @@ async def start_discussion(self: 'GameCog', channel: discord.TextChannel) -> Non
         if not done: # タイムアウト
             break
 
+    # ⏱️ 議論が終わったので、操作ボタンを消して「あとから推せない」ようにする
+    try:
+        await disc_control_msg.edit(view=None)
+    except: pass
+
     await channels.mute_all_alive_players(channel.guild, mute_status=True)
     # 昼フェーズ後に沈黙の呪いをクリア（翌昼には効果がなくなる）
     game.silenced_players.clear()
     # 狂人の混乱効果もクリア
     game.confused_players.clear() 
 
-    await channel.send("⏱️ 議論時間が終了しました。これより投票（処刑対象の選出）に移ります。")
+    await channel.send("⏱️ 議論時間が終了しました。これより投票（処刑対象の選出）に移ります。", silent=True)
     await self.start_voting(channel)
 
 # Discord.py の拡張ロードシステム用関数

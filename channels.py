@@ -36,6 +36,15 @@ async def create_game_channels(guild: discord.Guild) -> Optional[discord.Categor
     public_view = discord.PermissionOverwrite(view_channel=True)
     public_vc = discord.PermissionOverwrite(view_channel=True, connect=True)
     
+    # 参加者全員に対して明示的に「非表示」にするためのベース
+    # これにより、他のロールで「表示」が許可されていても、メンバー個別の拒否が優先されます
+    private_overwrites = {
+        guild.default_role: discord.PermissionOverwrite(view_channel=False, connect=False, read_messages=False)
+    }
+    for p in game.players:
+        # 個別のメンバーに対して、表示・メッセージ閲覧・接続をすべて拒否する
+        private_overwrites[p] = discord.PermissionOverwrite(view_channel=False, read_messages=False, connect=False)
+
     # 0. ゲーム進行チャンネル（メインの舞台）
     game.progress_channel = await guild.create_text_channel(
         "📢ゲーム進行", 
@@ -44,18 +53,14 @@ async def create_game_channels(guild: discord.Guild) -> Optional[discord.Categor
     )
 
     # 1. 人狼チャット（デフォルトで全員非表示）
-    wolf_overwrites = {
-        guild.default_role: discord.PermissionOverwrite(view_channel=False, send_messages=False),
-    }
+    wolf_overwrites = private_overwrites.copy()
     game.wolf_channel = await guild.create_text_channel("🐺人狼チャット", category=category, overwrites=wolf_overwrites)
     
     # 2. ゲームログと生存者ボイス（これらは全員が見えたり入れたりしてOK）
-    # ゲームログチャンネルはボット以外書き込み禁止にする
-    log_overwrites = {
-        guild.default_role: discord.PermissionOverwrite(view_channel=True, send_messages=False),
-    }
+    # ゲームログは進行中に秘密が漏れないよう、全員非表示にする
+    log_overwrites = private_overwrites.copy()
     if guild.me:
-        log_overwrites[guild.me] = discord.PermissionOverwrite(send_messages=True)
+        log_overwrites[guild.me] = discord.PermissionOverwrite(view_channel=True, send_messages=True)
     game.log_channel = await guild.create_text_channel("📜ゲームログ", category=category, overwrites=log_overwrites)
     
     # 生存者村ボイスは見れるし入れるようにする
@@ -66,9 +71,7 @@ async def create_game_channels(guild: discord.Guild) -> Optional[discord.Categor
     )
     
     # 3. 霊界・墓場（デフォルトで全員非表示）
-    dead_overwrites = {
-        guild.default_role: discord.PermissionOverwrite(view_channel=False, send_messages=False),
-    }
+    dead_overwrites = private_overwrites.copy()
     game.dead_channel = await guild.create_text_channel("👻墓場・霊界テキスト", category=category, overwrites=dead_overwrites)
     game.dead_vc = await guild.create_voice_channel("👻墓場・霊界", category=category, overwrites=dead_overwrites)
     

@@ -3,12 +3,13 @@ from config import get_game, RoleName
 from typing import Optional, List, Union
 
 class ActionSelect(discord.ui.Select):
-    def __init__(self, actor: discord.Member, action_label: str):
+    def __init__(self, actor: discord.Member, action_label: str, guild_id: int):
         self.actor: discord.Member = actor
         self.action_label: str = action_label
+        self.guild_id: int = guild_id
         
         # インスタンス生成時にギルドのゲーム状態を取得
-        game = get_game(actor.guild.id)
+        game = get_game(guild_id)
         
         # 狩人の場合、前回守ったターゲットを除外する
         last_id = game.last_protected.get(actor.id)
@@ -26,10 +27,10 @@ class ActionSelect(discord.ui.Select):
 
     async def callback(self, interaction: discord.Interaction):
         target_id = int(self.values[0])
-        guild = interaction.guild
+        guild = interaction.client.get_guild(self.guild_id)
         if not guild:
-            return await interaction.response.send_message("このコマンドはサーバー内でのみ有効です。", ephemeral=True)
-        game = get_game(guild.id)
+            return await interaction.response.send_message("❌ サーバー情報の取得に失敗しました。", ephemeral=True)
+        game = get_game(self.guild_id)
 
         # メンバーの取得
         target_user: Optional[Union[discord.Member, discord.User]] = guild.get_member(target_id)
@@ -37,12 +38,8 @@ class ActionSelect(discord.ui.Select):
             try: target_user = await guild.fetch_member(target_id)
             except: pass
         
-        # ここで「discord.Member」であることを厳密にチェック
-        if not isinstance(target_user, discord.Member):
-            return await interaction.response.send_message("ターゲットが見つかりません。", ephemeral=True)
-        
         # 既にゲームから除外されているかチェック
-        if target_user not in game.alive_players:
+        if not target_user or target_user not in game.alive_players:
              return await interaction.response.send_message("そのプレイヤーは既に生存していません。", ephemeral=True)
 
         game.actions[self.actor] = {"action": self.action_label, "target": target_user}
@@ -50,9 +47,9 @@ class ActionSelect(discord.ui.Select):
         await interaction.response.edit_message(content=f"選択完了: 【{target_user.display_name}】に「{self.action_label}」を行います。", view=None)
 
 class ActionView(discord.ui.View):
-    def __init__(self, actor: discord.Member, action_label: str, timeout: int = 60):
+    def __init__(self, actor: discord.Member, action_label: str, guild_id: int, timeout: int = 60):
         super().__init__(timeout=timeout)
-        self.add_item(ActionSelect(actor, action_label))
+        self.add_item(ActionSelect(actor, action_label, guild_id))
         self.message: Optional[discord.Message] = None
 
     async def on_timeout(self):

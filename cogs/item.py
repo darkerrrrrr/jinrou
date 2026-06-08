@@ -23,33 +23,35 @@ class WillNoteModal(discord.ui.Modal):
         max_length=500
     )
 
-    def __init__(self):
+    def __init__(self, guild_id: int):
         super().__init__(title="遺言ノートの記入")
+        self.guild_id = guild_id
 
     async def on_submit(self, interaction: discord.Interaction):
-        if not interaction.guild: return
-        game = get_game(interaction.guild.id)
+        guild = interaction.client.get_guild(self.guild_id)
+        game = get_game(self.guild_id)
         game.player_items[interaction.user.id] = "📝 遺言ノート"
         game.will_notes[interaction.user.id] = self.content.value
-        await game.save_state(interaction.guild) # 保存
+        if guild: await game.save_state(guild) # 保存
         await interaction.response.send_message("✅ 遺言を書き残しました。人狼に殺害された場合のみ公開されます。", ephemeral=True)
 
 # 📢 拡声器をDMから直接使うためのView
 class MegaphoneUseView(discord.ui.View):
-    def __init__(self):
+    def __init__(self, guild_id: int):
         super().__init__(timeout=None)
+        self.guild_id = guild_id
 
     @discord.ui.button(label="📢 拡声器を使用する", style=discord.ButtonStyle.danger)
     async def use_megaphone(self, interaction: discord.Interaction, button: discord.ui.Button):
         user = interaction.user
-        game = get_game(interaction.guild.id)
+        game = get_game(self.guild_id)
         
         if game.player_items.get(user.id) != "📢 拡声器":
             return await interaction.response.send_message("使用可能な拡声器を持っていません。", ephemeral=True)
         if not game.is_playing:
             return await interaction.response.send_message("ゲーム中のみ使用可能です。", ephemeral=True)
 
-        use_player_item(interaction.guild.id, user.id)
+        use_player_item(self.guild_id, user.id)
         await interaction.response.edit_message(content="📢 **拡声器を使用しました！** 全体チャンネルにアナウンスを送信しました。", view=None)
 
         if hasattr(game, 'text_channel') and game.text_channel:
@@ -63,9 +65,10 @@ class MegaphoneUseView(discord.ui.View):
 
 # 🪞 姿写しの鏡をDMから直接使うためのViewとSelect
 class MirrorSelect(discord.ui.Select):
-    def __init__(self, actor: discord.Member):
+    def __init__(self, actor: discord.Member, guild_id: int):
         # 自分以外の生存者を選択肢にする
-        game = get_game(actor.guild.id)
+        self.guild_id = guild_id
+        game = get_game(guild_id)
         current_options = [
             discord.SelectOption(label=p.display_name, value=str(p.id)) 
             for p in game.alive_players if p != actor
@@ -74,20 +77,21 @@ class MirrorSelect(discord.ui.Select):
 
     async def callback(self, interaction: discord.Interaction):
         user = interaction.user
-        game = get_game(interaction.guild.id)
+        game = get_game(self.guild_id)
+        guild = interaction.client.get_guild(self.guild_id)
         if game.player_items.get(user.id) != "🪞 姿写しの鏡":
             return await interaction.response.send_message("使用可能な鏡を持っていません。", ephemeral=True)
 
         target_id = int(self.values[0])
-        target_member = interaction.guild.get_member(target_id) or await interaction.guild.fetch_member(target_id)
-        if not target_member:
+        target_member = guild.get_member(target_id) if guild else None
+        if target_member is None:
             return await interaction.response.send_message("対象のプレイヤーが見つかりません。", ephemeral=True)
 
         # ターゲットが現在も生存しているかチェック
         if target_member not in game.alive_players:
             return await interaction.response.send_message("そのプレイヤーは既に生存していないため、覗き見ることはできません。", ephemeral=True)
 
-        use_player_item(interaction.guild.id, user.id)
+        use_player_item(self.guild_id, user.id)
         target_role = game.roles.get(target_member)
         
         if target_role and target_role.name == RoleName.VILLAGER:
@@ -98,21 +102,23 @@ class MirrorSelect(discord.ui.Select):
         await interaction.response.edit_message(content=result_text, view=None)
 
 class MirrorUseView(discord.ui.View):
-    def __init__(self, actor: discord.Member):
+    def __init__(self, actor: discord.Member, guild_id: int):
         super().__init__(timeout=300)  # 昼フェーズ中に使用するため、5分のタイムアウト
         # 生存者リストをSelectメニューに引き渡す
-        self.add_item(MirrorSelect(actor))
+        self.add_item(MirrorSelect(actor, guild_id))
 
 
 # 🎲 夜フェーズで村人がアイテムを引くためのガチャView
 class ItemDrawView(discord.ui.View):
-    def __init__(self, timeout=60):
+    def __init__(self, guild_id: int, timeout=60):
         super().__init__(timeout=timeout)
+        self.guild_id = guild_id
 
     @discord.ui.button(label="🎲 持ち物を整理する (アイテムを引く)", style=discord.ButtonStyle.primary)
     async def draw_item(self, interaction: discord.Interaction, button: discord.ui.Button):
         user = interaction.user
-        game = get_game(interaction.guild.id)
+        game = get_game(self.guild_id)
+        guild = interaction.client.get_guild(self.guild_id)
         
         if user.id in game.player_items:
             return await interaction.response.send_message("今夜の準備はすでに完了しています。", ephemeral=True)
@@ -122,21 +128,21 @@ class ItemDrawView(discord.ui.View):
         
         item_name = random.choice(list(ITEMS.keys()))
         game.player_items[user.id] = item_name
-        await game.save_state(interaction.guild) # アイテム確定時に保存
+        if guild: await game.save_state(guild) # アイテム確定時に保存
         game.check_night_actions_complete()
         
         if item_name == "📢 拡声器":
             await interaction.response.edit_message(
                 content=f"🎒 **アイテムを支給されました！**\n\n手に入れたもの: **{item_name}**\n効果: {ITEMS[item_name]}\n\n👇 **昼の議論中、発言権が欲しいタイミングで下のボタンを押してください！**", 
-                view=MegaphoneUseView()
+                view=MegaphoneUseView(self.guild_id)
             )
         elif item_name == "🪞 姿写しの鏡":
             await interaction.response.edit_message(
                 content=f"🎒 **アイテムを支給されました！**\n\n手に入れたもの: **{item_name}**\n効果: {ITEMS[item_name]}\n\n👇 **昼の議論中、怪しいと思った人を1人選んで正体を覗き見てください！**", 
-                view=MirrorUseView(user)
+                view=MirrorUseView(user, self.guild_id)
             )
         elif item_name == "📝 遺言ノート":
-            await interaction.response.send_modal(WillNoteModal())
+            await interaction.response.send_modal(WillNoteModal(self.guild_id))
         elif item_name == "🛡️ お守り":
             await interaction.response.edit_message(
                 content=f"🎒 **アイテムを支給されました！**\n\n手に入れたもの: **{item_name}**\n効果: {ITEMS[item_name]}\n\n💡 このアイテムは朝フェーズで自動的に効果が発動します。今夜人狼に襲撃されても生き残ります！", 

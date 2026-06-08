@@ -65,10 +65,11 @@ async def execute_game_start(self: 'GameCog', channel: discord.TextChannel) -> N
     for p, role in game.roles.items():
         try:
             msg = f"🔮 あなたの役職は 【**{role.name}**】 (陣営: {role.team}) です。"
+            is_wolf = (role.name == RoleName.WOLF)
             
             # ゲーム開始DMを送信
             try:
-                start_dm = await p.send("🎮 **人狼ゲームが開始されました！**\nあなたの役職DMをご確認ください。")
+                start_dm = await p.send("🎮 **人狼ゲームが開始されました！**\nあなたの役職DMをご確認ください。", silent=True)
                 game.add_dm_message(p.id, start_dm.id)
             except Exception as e:
                 print(f"⚠️ {p.display_name} へのゲーム開始DM送信失敗: {e}")
@@ -78,7 +79,7 @@ async def execute_game_start(self: 'GameCog', channel: discord.TextChannel) -> N
             if role.name == RoleName.WOLF and len(werewolves) > 1:
                 partners = [w.display_name for w in werewolves if w != p]
                 msg += f"\n🐺 仲間の人狼: {', '.join(partners)}"
-            dm_msg = await p.send(msg)
+            dm_msg = await p.send(msg, silent=not is_wolf)
             game.add_dm_message(p.id, dm_msg.id)
         except Exception as e:
             err_msg = f"⚠️ {p.mention} への役職通知DM送信に失敗しました。設定を確認してください。"
@@ -90,6 +91,12 @@ async def execute_game_start(self: 'GameCog', channel: discord.TextChannel) -> N
     await channels.create_game_channels(channel.guild)
     await channels.setup_wolf_permissions(channel.guild)
     
+    # 🚀 ゲームが始まったので、募集メッセージのボタンを消して「あとから推せない」ようにする
+    if game.recruit_message:
+        try:
+            await game.recruit_message.edit(view=None)
+        except: pass
+
     game.is_playing = True
     game.alive_players = game.players.copy()
     game.thief_action_done = False
@@ -112,8 +119,8 @@ async def execute_game_start(self: 'GameCog', channel: discord.TextChannel) -> N
     )
     start_embed.set_footer(text="※プレイヤーは生存者ボイスチャンネルに移動してください。\n夜フェーズに入ると、DMで行動を促されます。")
     
-    await channel.send(embed=start_embed)
-    await game.log_channel.send("─── ゲームログの記録を開始しました ───")
+    await channel.send(embed=start_embed, silent=True)
+    await game.log_channel.send("─── ゲームログの記録を開始しました ───", silent=True)
     
     await game.save_state(channel.guild)
     await self.start_night(channel)
@@ -211,10 +218,10 @@ async def check_game_over(self: 'GameCog', channel: discord.TextChannel) -> bool
                 # 万が一作成に失敗した場合は、ボットを呼び出した元のチャンネルを予備として使用
                 result_destination = game.text_channel or channel
 
-        await result_destination.send(embed=embed, file=file)
+        await result_destination.send(embed=embed, file=file, silent=True)
 
-        await game.log_channel.send(f"🏁 ゲームが終了しました。結果: {victory_message}")
-        await game.log_channel.send("─── ゲームログの記録を終了しました ───")
+        await game.log_channel.send(f"🏁 ゲームが終了しました。結果: {victory_message}", silent=True)
+        await game.log_channel.send("─── ゲームログの記録を終了しました ───", silent=True)
 
         # --- ゲーム終了後のクリーンアップ ---
         # 1. 募集メッセージのViewを削除
@@ -284,19 +291,26 @@ async def check_game_over(self: 'GameCog', channel: discord.TextChannel) -> bool
         game.recruit_message = None # メッセージ参照もクリア
 
         # 5. gameオブジェクトの状態をリセット
-        # 6. DMで送った全メッセージを削除
-        for player_id, msg_ids in game.role_dm_messages.items():
-            player = channel.guild.get_member(player_id)
-            if player:
-                try:
-                    dm_channel = await player.create_dm()
-                    for msg_id in msg_ids:
-                        try:
-                            msg = await dm_channel.fetch_message(msg_id)
-                            await msg.delete()
-                        except: pass # 既に削除されている場合はスキップ
-                except Exception as e:
-                    print(f"⚠️ {player.display_name} のDM削除失敗: {e}")
+        # 6. DMで送った全メッセージを高速に一括削除
+        async def _delete_dm_messages(p, m_ids):
+            try:
+                dm_ch = await p.create_dm()
+                for mid in m_ids:
+                    try:
+                        m = await dm_ch.fetch_message(mid)
+                        await m.delete()
+                    except: pass
+            except: pass
+
+        dm_tasks = []
+        for pid, mids in game.role_dm_messages.items():
+            p = channel.guild.get_member(pid)
+            if p:
+                dm_tasks.append(_delete_dm_messages(p, mids))
+        
+        if dm_tasks:
+            await asyncio.gather(*dm_tasks)
+
         game.reset_state()
         return True
     return False
