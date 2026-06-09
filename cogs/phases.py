@@ -113,14 +113,6 @@ async def execute_game_start(self: 'GameCog', channel: discord.TextChannel) -> N
             color=discord.Color.red()
         ))
 
-    # 📢 以降のゲームメッセージは必ず「📢ゲーム進行」チャンネルに送る
-    if not game.progress_channel:
-        game.is_playing = False
-        return await channel.send(embed=discord.Embed(
-            description="❌ 進行用チャンネルの準備に失敗しました。Botの権限を確認してください。",
-            color=discord.Color.red()
-        ))
-
     target_channel = game.progress_channel
     game.alive_players = game.players.copy()
     game.thief_action_done = False

@@ -162,6 +162,10 @@ class WerewolfGame:
         # 生存している役職名をリスト化
         alive_roles = [getattr(self.roles[p], "name", "") for p in self.alive_players if p in self.roles]
         
+        # 役職データが空（読み込み失敗や初期化中）の場合は判定をスキップ
+        if not alive_roles:
+            return None
+
         wolf_count = alive_roles.count(RoleName.WOLF)
         sk_count = alive_roles.count(RoleName.SK)
         total_alive = len(alive_roles)

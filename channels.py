@@ -17,6 +17,7 @@ async def create_game_channels(guild: discord.Guild) -> Optional[discord.Categor
     category_name = f"🐺人狼ゲーム-{guild.id}"
     
     # 既存の同名カテゴリーをクリーンアップ
+    # ボットが再起動して状態を忘れている場合、ここで古いチャンネルが削除されます
     for channel in guild.channels:
         if isinstance(channel, discord.CategoryChannel) and channel.name == category_name:
             try:
