@@ -218,6 +218,8 @@ async def start_voting(self: 'GameCog', channel: discord.TextChannel) -> None:
         await target_channel.send(embed=discord.Embed(description="誰も投票しなかったため、本日の処刑は行われません。", color=discord.Color.light_grey()), silent=True)
         if game.log_channel:
             await game.log_channel.send(embed=discord.Embed(description="🗳️ 投票がなかったため、処刑なし。", color=discord.Color.light_grey()))
+        # 処刑がなくても夜フェーズへ進める
+        return await self.start_night(channel)
     elif channel.guild:
         guild = channel.guild
         # 投票結果の表示（内訳）
