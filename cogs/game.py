@@ -9,7 +9,7 @@ import channels
 from cogs.item import reset_items
 
 # 分割したフェーズのインポート
-from cogs.phases import execute_game_start, check_game_over
+from cogs.phases import execute_game_start, check_game_over, force_stop_game
 from cogs.night import start_night, process_night_results
 from cogs.discussion import start_discussion
 from cogs.voting import start_voting
@@ -114,6 +114,23 @@ class GameCog(commands.Cog):
                         pass
             await ctx.send(f"🧹 DM内のボットのメッセージを {count} 件削除しました。", delete_after=5)
 
+    @commands.command(name="game_stop")
+    @commands.guild_only()
+    async def game_stop(self, ctx):
+        """現在進行中のゲームを強制終了し、チャンネルとデータを削除します"""
+        game = get_game(ctx.guild.id)
+        if not game.is_playing:
+            return await ctx.send("⚠️ 現在進行中のゲームはありません。")
+
+        # 権限チェック：主催者または管理者のみ
+        is_admin = ctx.author.guild_permissions.administrator
+        is_host = (game.host and ctx.author.id == game.host.id)
+        if not (is_admin or is_host):
+            return await ctx.send("❌ ゲームを強制終了できるのは、主催者または管理者のみです。", delete_after=5)
+
+        await ctx.send("🛑 ゲームを強制終了します。リソースを解放しています...")
+        await self.force_stop_game(ctx.channel)
+
     @msgdel.error
     async def msgdel_error(self, ctx, error):
         """msgdelコマンド専用のエラーハンドリング"""
@@ -128,6 +145,30 @@ class GameCog(commands.Cog):
         else:
             await ctx.send(f"❌ 予期せぬエラーが発生しました: {error}", delete_after=5)
 
+    @commands.Cog.listener()
+    async def on_voice_state_update(self, member, before, after):
+        """ボイス状態を監視し、ロック中の勝手なミュート解除を防止する"""
+        if not member.guild: return
+        game = get_game(member.guild.id)
+        if not game.is_playing: return
+
+        if member in game.alive_players:
+            # 🌙 夜間・投票時間のロック（マイクを強制的にミュート）
+            if getattr(game, 'vc_locked', False):
+                if not after.mute:
+                    try:
+                        await member.edit(mute=True)
+                    except:
+                        pass
+            # ☀️ 昼間のアイテム効果（マイクのみ強制オフ）
+            elif member.id in game.silenced_players:
+                # マイクがオンになった場合、強制的に「ミュート」に戻す
+                if not after.mute:
+                    try:
+                        await member.edit(mute=True)
+                    except:
+                        pass
+
     # 分割したメソッドをバインド
     execute_game_start = execute_game_start
     start_night = start_night
@@ -135,6 +176,7 @@ class GameCog(commands.Cog):
     start_discussion = start_discussion
     start_voting = start_voting
     check_game_over = check_game_over
+    force_stop_game = force_stop_game
 
 
 # 💡 Discord.pyの拡張ロードシステム用関数（これで競合しません）

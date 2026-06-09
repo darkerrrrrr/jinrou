@@ -69,7 +69,8 @@ async def execute_game_start(self: 'GameCog', channel: discord.TextChannel) -> N
             
             # ゲーム開始DMを送信
             try:
-                start_dm = await p.send("🎮 **人狼ゲームが開始されました！**\nあなたの役職DMをご確認ください。", silent=True)
+                start_embed = discord.Embed(title="🎮 人狼ゲーム開始！", description="あなたの役職DMをご確認ください。", color=discord.Color.gold())
+                start_dm = await p.send(embed=start_embed, silent=True)
                 game.add_dm_message(p.id, start_dm.id)
             except Exception as e:
                 print(f"⚠️ {p.display_name} へのゲーム開始DM送信失敗: {e}")
@@ -121,6 +122,25 @@ async def execute_game_start(self: 'GameCog', channel: discord.TextChannel) -> N
     
     await channel.send(embed=start_embed, silent=True)
     await game.log_channel.send("─── ゲームログの記録を開始しました ───", silent=True)
+
+    # 🔊 プレイヤーがボイスチャンネルに移動する猶予（20秒）を与える。
+    # 既にどこかのVCにいる人はボットが自動で移動させる。
+    wait_embed = discord.Embed(
+        title="🔊 ボイスチャンネル移動",
+        description="⏳ 20秒後にゲームを開始します。どこかのボイスチャンネルに入っているプレイヤーは自動的に移動させます。\n未入室の方は **🔊生存者村** へ入ってください。",
+        color=discord.Color.blue()
+    )
+    await channel.send(embed=wait_embed, silent=True, delete_after=20)
+
+    # 他のボイスチャンネルにいるプレイヤーを「🔊生存者村」へ強制移動させる
+    for p in game.players:
+        if p.voice and p.voice.channel and p.voice.channel != game.alive_vc:
+            try:
+                await p.move_to(game.alive_vc)
+            except Exception:
+                pass # 権限不足などで移動できない場合は無視して手動移動を促す
+
+    await asyncio.sleep(20)
     
     await game.save_state(channel.guild)
     await self.start_night(channel)
@@ -140,7 +160,8 @@ async def check_game_over(self: 'GameCog', channel: discord.TextChannel) -> bool
     victory_message = game.check_victory()
     if victory_message:
         game.is_playing = False
-        await channels.mute_all_alive_players(channel.guild, mute_status=False)
+        game.vc_locked = False
+        await _cleanup_resources(game, channel.guild)
 
         # 🏆 ランキングの更新
         winner_team = ""
@@ -223,94 +244,64 @@ async def check_game_over(self: 'GameCog', channel: discord.TextChannel) -> bool
         await game.log_channel.send(f"🏁 ゲームが終了しました。結果: {victory_message}", silent=True)
         await game.log_channel.send("─── ゲームログの記録を終了しました ───", silent=True)
 
-        # --- ゲーム終了後のクリーンアップ ---
-        # 1. 募集メッセージのViewを削除
-        if game.recruit_message:
-            try:
-                await game.recruit_message.edit(view=None)
-            except Exception as e:
-                print(f"⚠️ 募集メッセージのView削除失敗: {e}")
-
-        # 2. 作成したチャンネルとカテゴリを削除
-        channels_to_delete = []
-        category_to_delete = None
-
-        # いずれかのチャンネルからカテゴリを取得
-        if game.progress_channel:
-            if game.progress_channel.category:
-                category_to_delete = game.progress_channel.category
-            channels_to_delete.append(game.progress_channel)
-        if game.wolf_channel: channels_to_delete.append(game.wolf_channel)
-        if game.log_channel: channels_to_delete.append(game.log_channel)
-        if game.dead_channel: channels_to_delete.append(game.dead_channel)
-        if game.alive_vc: channels_to_delete.append(game.alive_vc)
-        if game.dead_vc: channels_to_delete.append(game.dead_vc)
-        if game.data_channel: channels_to_delete.append(game.data_channel)
-
-        # カテゴリがあればカテゴリごと削除（最も効率的）
-        if category_to_delete:
-            try:
-                # カテゴリ内の全チャンネルを削除してからカテゴリを削除
-                await asyncio.gather(*[c.delete() for c in category_to_delete.channels])
-                await category_to_delete.delete()
-                print(f"✅ カテゴリ '{category_to_delete.name}' とその中のチャンネルを削除しました。")
-            except Exception as e:
-                print(f"⚠️ カテゴリ '{category_to_delete.name}' 削除失敗: {e}。個別のチャンネル削除を試みます。")
-                # カテゴリ削除失敗時は個別に削除を試みる
-                for ch in channels_to_delete:
-                    if ch:
-                        try:
-                            await ch.delete()
-                        except Exception as e_ch:
-                            print(f"⚠️ チャンネル '{ch.name}' 削除失敗: {e_ch}")
-        else:
-            # カテゴリが特定できない場合は個別に削除
-            for ch in channels_to_delete:
-                if ch:
-                    try:
-                        await ch.delete()
-                    except Exception:
-                        pass
-
-        # 3. 保存されていた一時的なゲームデータファイルを削除
-        state_file = f"data/game_{channel.guild.id}.json"
-        if os.path.exists(state_file):
-            try:
-                os.remove(state_file)
-            except Exception as e:
-                print(f"⚠️ セーブデータ削除失敗: {e}")
-
-        # 4. gameオブジェクトのチャンネル参照をクリア (reset_stateで大部分はクリアされるが念のため)
-        game.progress_channel = None
-        game.wolf_channel = None
-        game.log_channel = None
-        game.dead_channel = None
-        game.alive_vc = None
-        game.dead_vc = None
-        game.data_channel = None
-        game.recruit_message = None # メッセージ参照もクリア
-
-        # 5. gameオブジェクトの状態をリセット
-        # 6. DMで送った全メッセージを高速に一括削除
-        async def _delete_dm_messages(p, m_ids):
-            try:
-                dm_ch = await p.create_dm()
-                for mid in m_ids:
-                    try:
-                        m = await dm_ch.fetch_message(mid)
-                        await m.delete()
-                    except: pass
-            except: pass
-
-        dm_tasks = []
-        for pid, mids in game.role_dm_messages.items():
-            p = channel.guild.get_member(pid)
-            if p:
-                dm_tasks.append(_delete_dm_messages(p, mids))
-        
-        if dm_tasks:
-            await asyncio.gather(*dm_tasks)
-
         game.reset_state()
         return True
-    return False
+
+async def force_stop_game(self: 'GameCog', channel: discord.TextChannel) -> bool:
+    """
+    ゲームを強制終了し、全リソースをクリーンアップする
+    """
+    game = get_game(channel.guild.id)
+    game.is_playing = False
+    game.vc_locked = False
+    await _cleanup_resources(game, channel.guild)
+    game.reset_state()
+    return True
+
+async def _cleanup_resources(game, guild: discord.Guild):
+    """全リソースをクリーンアップする内部ヘルパー"""
+    # 1. VC移動とミュート解除
+    game_category_id = game.progress_channel.category_id if game.progress_channel else None
+    target_vc = next((vc for vc in guild.voice_channels if vc.category_id != game_category_id), None)
+    
+    for vc in [game.alive_vc, game.dead_vc]:
+        if vc:
+            for m in vc.members:
+                try: await m.edit(mute=False, move_to=target_vc)
+                except: pass
+
+    # 2. チャンネルとカテゴリの削除
+    category = game.progress_channel.category if game.progress_channel else None
+    if category:
+        try:
+            await asyncio.gather(*[c.delete() for c in category.channels])
+            await category.delete()
+        except: pass
+
+    # 3. 募集メッセージのボタン削除
+    if game.recruit_message:
+        try: await game.recruit_message.edit(view=None)
+        except: pass
+
+    # 4. DM削除
+    async def _del_dm(p, mids):
+        try:
+            ch = await p.create_dm()
+            for mid in mids:
+                try:
+                    msg = await ch.fetch_message(mid)
+                    await msg.delete()
+                except: pass
+        except: pass
+
+    tasks = []
+    for pid, mids in game.role_dm_messages.items():
+        p = guild.get_member(pid)
+        if p: tasks.append(_del_dm(p, mids))
+    if tasks: await asyncio.gather(*tasks)
+
+    # 5. セーブデータ削除
+    try:
+        path = f"data/game_{guild.id}.json"
+        if os.path.exists(path): os.remove(path)
+    except: pass

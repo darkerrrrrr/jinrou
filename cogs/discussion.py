@@ -1,7 +1,8 @@
-import discord, asyncio, time
+import discord, asyncio, time, random
 from config import get_game
 import channels
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional, cast
+from .item import QuickItemView
 if TYPE_CHECKING:
     # 相対インポートにすることで、同じフォルダ内のGameCogをエディタが解決しやすくなります
     from .game import GameCog
@@ -46,13 +47,19 @@ class DiscussionView(discord.ui.View):
                 self.timeout += 60
             
             new_ts = int(self.end_timestamp)
+            new_embed = discord.Embed(
+                title="💬 昼の議論開始",
+                description=f"議論終了まで： <t:{new_ts}:R>\n生存者の皆さんは話し合ってください！",
+                color=discord.Color.light_grey()
+            )
             try:
-                await self.timer_msg.edit(content=f"💬 昼の議論を開始します。議論終了まで： <t:{new_ts}:R>\n生存者の皆さんは話し合ってください！")
+                await self.timer_msg.edit(embed=new_embed)
             except: pass
 
             self.extend_event.set()
             await game.save_state(guild) # 保存
-            await interaction.response.edit_message(content="⏳ 過半数の賛成により、議論時間を **60秒** 延長しました！", view=self)
+            ext_confirm_embed = discord.Embed(description="⏳ 過半数の賛成により、議論時間を **60秒** 延長しました！", color=discord.Color.green())
+            await interaction.response.edit_message(embed=ext_confirm_embed, view=self)
         else:
             await interaction.response.edit_message(view=self)
 
@@ -78,7 +85,8 @@ class DiscussionView(discord.ui.View):
             button.disabled = True
             self.skip_event.set()
             await game.save_state(interaction.guild) # 保存
-            await interaction.response.edit_message(content=f"✅ {len(self.ready_players)}名が賛成したため、投票に移行します。", view=self)
+            skip_embed = discord.Embed(description=f"✅ {len(self.ready_players)}名が賛成したため、投票に移行します。", color=discord.Color.green())
+            await interaction.response.edit_message(embed=skip_embed, view=self)
         else:
             await interaction.response.edit_message(view=self)
 
@@ -93,36 +101,62 @@ async def start_discussion(self: 'GameCog', channel: discord.TextChannel) -> Non
         channel: メインチャンネル
     """
     game = get_game(channel.guild.id)
+    target_channel = game.progress_channel or channel
+    game.vc_locked = False  # 議論開始なのでロック解除
+
+    # 📦 議論中のランダム・アイテムドロップ・タスク
+    async def spawn_quick_item():
+        try:
+            # 75%の確率で発生するように調整 (0.0〜1.0のうち0.75未満なら実行)
+            if random.random() >= 0.75:
+                return
+
+            # 議論時間の20%〜80%の間のランダムなタイミングで1回出現
+            wait_time = random.uniform(game.discussion_time * 0.2, game.discussion_time * 0.8)
+            await asyncio.sleep(wait_time)
+            
+            if bool(game.is_playing) and target_channel:
+                drop_embed = discord.Embed(title="📦 村の広場に荷物が届きました！", description="一番早くボタンを押した生存者がアイテムを獲得できます！", color=discord.Color.gold())
+                await target_channel.send(embed=drop_embed, view=QuickItemView(channel.guild.id))
+        except asyncio.CancelledError:
+            pass # 議論が早く終わった場合はキャンセルされる
+
+
     # 【アイテム効果】「沈黙の御札」を貼られている人はミュートを解除しない
     alive_listeners = []
     for p in game.alive_players:
         if isinstance(p, discord.Member):
             if p.id in game.silenced_players:
-                # VCミュート設定
-                try:
-                    await p.edit(mute=True) # VCミュート維持
-                except: pass
+                # アイテム効果：マイク（発言）を禁止する
+                if p.voice:
+                    try:
+                        await p.edit(mute=True) 
+                    except discord.Forbidden: pass
+                    except Exception: pass
+
                 # テキストチャンネルの送信権限を剥奪
-                await channel.set_permissions(p, send_messages=False)
-                await channel.send(f"🤐 **{p.display_name} さんは「沈黙の御札」の呪いにより、今日の議論での発言・チャット（VC/テキスト両方）が禁止されています！**")
+                await target_channel.set_permissions(p, send_messages=False)
+                mute_embed = discord.Embed(description=f"🤐 **{p.mention} さんは「沈黙の御札」の呪いにより、今日の発言が禁止されています。**", color=discord.Color.dark_grey())
+                await target_channel.send(embed=mute_embed)
             else:
                 alive_listeners.append(p)
             
     # 呪いにかかっていない生存者のミュートを解除
     for p in alive_listeners:
         if isinstance(p, discord.Member):
-            try:
-                await p.edit(mute=False)
-                # テキストチャンネルの送信権限を戻す
-                await channel.set_permissions(p, overwrite=None)
-            except Exception as e:
-                print(f"⚠️ ミュート解除失敗 ({p.display_name}): {e}")
+            if p.voice:
+                try:
+                    # マイクミュートを解除する
+                    await p.edit(mute=False)
+                except discord.Forbidden: pass
+                except Exception: pass
+            
+            # テキストチャンネルの送信権限を戻す
+            await target_channel.set_permissions(p, overwrite=None)
 
     # 終了時刻を計算してDiscordの相対タイムスタンプを作成
     end_timestamp = int(time.time() + game.discussion_time)
     
-    target_channel = game.progress_channel or channel
-
     disc_embed = discord.Embed(
         title="💬 昼の議論開始",
         description=f"議論終了まで： <t:{end_timestamp}:R>\n生存者の皆さんは話し合ってください！",
@@ -130,13 +164,15 @@ async def start_discussion(self: 'GameCog', channel: discord.TextChannel) -> Non
     )
     timer_msg = await target_channel.send(embed=disc_embed, silent=True)
 
-    # 霊界には議論開始を通知
-    if game.dead_channel:
-        await game.dead_channel.send("💬 昼の議論が始まりました。生存者の推理を聞いてみましょう。", silent=False)
+    # 霊界のスレッドに議論開始を通知
+    if game.dead_thread:
+        await game.dead_thread.send(embed=discord.Embed(title="💬 昼の議論開始", description="生存者の推理を聞いてみましょう。", color=discord.Color.light_grey()), silent=False)
     
     if game.log_channel:
-        await game.log_channel.send("💬 昼の議論フェーズに入りました。")
+        await game.log_channel.send(embed=discord.Embed(description="💬 昼の議論フェーズに入りました。", color=discord.Color.light_grey()))
     await game.save_state(channel.guild)
+    
+    qte_task = asyncio.create_task(spawn_quick_item())
     
     # スキップボタンの表示
     view = DiscussionView(timeout=float(game.discussion_time), timer_msg=timer_msg, end_timestamp=end_timestamp)
@@ -151,7 +187,8 @@ async def start_discussion(self: 'GameCog', channel: discord.TextChannel) -> Non
             elif "時間延長" in str(item.label):
                 item.label = f"時間延長 (0/{needed})"
 
-    disc_control_msg = await target_channel.send("💡 議論を切り上げて投票に進むには、下のボタンを押してください（過半数の賛成が必要）。", view=view, silent=True)
+    control_embed = discord.Embed(description="💡 議論を切り上げて投票に進むには、下のボタンを押してください（過半数の賛成が必要）。", color=discord.Color.blue())
+    disc_control_msg = await target_channel.send(embed=control_embed, view=view, silent=True)
     
     # 議論終了の待機ループ
     while True:
@@ -180,18 +217,20 @@ async def start_discussion(self: 'GameCog', channel: discord.TextChannel) -> Non
         if not done: # タイムアウト
             break
 
+    qte_task.cancel() # 議論終了時にタスクを停止
     # ⏱️ 議論が終わったので、操作ボタンを消して「あとから推せない」ようにする
     try:
         await disc_control_msg.edit(view=None)
     except: pass
 
     await channels.mute_all_alive_players(channel.guild, mute_status=True)
+    game.vc_locked = True  # 投票フェーズに入るので再びロック
     # 昼フェーズ後に沈黙の呪いをクリア（翌昼には効果がなくなる）
     game.silenced_players.clear()
     # 狂人の混乱効果もクリア
     game.confused_players.clear() 
 
-    await channel.send("⏱️ 議論時間が終了しました。これより投票（処刑対象の選出）に移ります。", silent=True)
+    await target_channel.send(embed=discord.Embed(description="⏱️ 議論時間が終了しました。これより投票に移ります。", color=discord.Color.orange()), silent=True)
     await self.start_voting(channel)
 
 # Discord.py の拡張ロードシステム用関数

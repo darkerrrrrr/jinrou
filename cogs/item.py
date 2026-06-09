@@ -1,7 +1,7 @@
 import discord
 import random
-from typing import Optional
-from config import get_game, RoleName
+from typing import Optional, cast
+from config import get_game, RoleName, ITEM_WEIGHTS, ItemLiteral
 
 ITEMS = {
     "📢 拡声器": "【昼用】議論中、DMのボタンを押すとBotが全体チャットで全員に静聴を呼びかけ、あなたの発言に注目を集めます。",
@@ -10,7 +10,7 @@ ITEMS = {
     "🛡️ お守り": "【パッシブ】今夜人狼に襲撃されても、1度だけ自動で生き残る（身代わりアイテム）。",
     "🧪 疑惑の劇薬": "【投票用】今日の自分の投票が自動的に「2票分」としてカウントされます。",
     "🪞 姿写しの鏡": "【昼用】生存者1人を指定し、その人が昨日アイテムを引いた（普通の村人だった）かどうかを覗き見ます。",
-    "🤐 沈黙の御札": "【投票用】投票フェーズで指定した1人を、次の日の昼の議論フェーズで完全ミュート（発言禁止）にします。"
+    "🤐 沈黙の御札": "【投票用】投票フェーズで指定した1人を、次の日の議論フェーズで発言禁止（マイクミュート）にします。"
 }
 
 # 📝 遺言ノートを記入するためのModal
@@ -52,16 +52,16 @@ class MegaphoneUseView(discord.ui.View):
             return await interaction.response.send_message("ゲーム中のみ使用可能です。", ephemeral=True)
 
         use_player_item(self.guild_id, user.id)
-        await interaction.response.edit_message(content="📢 **拡声器を使用しました！** 全体チャンネルにアナウンスを送信しました。", view=None)
+        feedback_embed = discord.Embed(description="📢 **拡声器を使用しました！**\n全体チャンネルにアナウンスを送信しました。", color=discord.Color.red())
+        await interaction.response.edit_message(embed=feedback_embed, view=None)
 
         if hasattr(game, 'text_channel') and game.text_channel:
-            announcement = (
-                f"🚨🚨🚨 **【拡声器発動】** 🚨🚨🚨\n"
-                f"📣 **{user.mention} さんが拡声器を使用しました！**\n"
-                f"「全員静かに！私の話を聞いてください！」\n\n"
-                f"🔮 生存者の皆さんは、一旦議論の手を止めて彼の発言に注目してください！"
+            embed = discord.Embed(
+                title="🚨 拡声器発動！",
+                description=f"📣 **{user.mention} さんが注目を求めています！**\n\n「全員静かに！私の話を聞いてください！」\n\n議論の手を止め、彼の言葉に耳を傾けましょう。",
+                color=discord.Color.red()
             )
-            await game.text_channel.send(announcement)
+            await game.text_channel.send(embed=embed)
 
 # 🪞 姿写しの鏡をDMから直接使うためのViewとSelect
 class MirrorSelect(discord.ui.Select):
@@ -95,11 +95,11 @@ class MirrorSelect(discord.ui.Select):
         target_role = game.roles.get(target_member)
         
         if target_role and target_role.name == RoleName.VILLAGER:
-            result_text = f"🟢 【鏡の魔力】 {target_member.display_name} さんは、昨夜『村人の身支度（アイテム支給）』を行っていました。（普通の村人である可能性が極めて高いです）"
+            res_embed = discord.Embed(title="🪞 鏡の魔力", description=f"🟢 {target_member.display_name} さんは昨夜、村人の身支度を行っていました。\n(役職を持たない村人である可能性が極めて高いです)", color=discord.Color.green())
         else:
-            result_text = f"🔴 【鏡の魔力】 {target_member.display_name} さんは、昨夜『村人の身支度』を行っていません。（人狼や占い師などの役職持ち、あるいはアイテムを引き忘れた人です）"
+            res_embed = discord.Embed(title="🪞 鏡の魔力", description=f"🔴 {target_member.display_name} さんは昨夜、身支度を行っていません。\n(人狼や占い師などの役職持ちである可能性があります)", color=discord.Color.red())
 
-        await interaction.response.edit_message(content=result_text, view=None)
+        await interaction.response.edit_message(embed=res_embed, view=None)
 
 class MirrorUseView(discord.ui.View):
     def __init__(self, actor: discord.Member, guild_id: int):
@@ -126,38 +126,33 @@ class ItemDrawView(discord.ui.View):
         # ボタン無効化で二重取得を防止
         button.disabled = True
         
-        item_name = random.choice(list(ITEMS.keys()))
+        # 重み付けに基づいたアイテム抽選
+        item_list = list(ITEM_WEIGHTS.keys())
+        item_name = cast(ItemLiteral, random.choices(item_list, weights=[ITEM_WEIGHTS[i] for i in item_list], k=1)[0])
         game.player_items[user.id] = item_name
         if guild: await game.save_state(guild) # アイテム確定時に保存
         game.check_night_actions_complete()
         
+        res_embed = discord.Embed(title="🎒 アイテム支給", color=discord.Color.gold())
+        res_embed.description = f"手に入れたもの: **{item_name}**\n効果: {ITEMS[item_name]}"
+
         if item_name == "📢 拡声器":
-            await interaction.response.edit_message(
-                content=f"🎒 **アイテムを支給されました！**\n\n手に入れたもの: **{item_name}**\n効果: {ITEMS[item_name]}\n\n👇 **昼の議論中、発言権が欲しいタイミングで下のボタンを押してください！**", 
-                view=MegaphoneUseView(self.guild_id)
-            )
+            res_embed.description += "\n\n👇 **昼の議論中、発言権が欲しいタイミングで下のボタンを押してください！**"
+            await interaction.response.edit_message(embed=res_embed, view=MegaphoneUseView(self.guild_id))
         elif item_name == "🪞 姿写しの鏡":
-            await interaction.response.edit_message(
-                content=f"🎒 **アイテムを支給されました！**\n\n手に入れたもの: **{item_name}**\n効果: {ITEMS[item_name]}\n\n👇 **昼の議論中、怪しいと思った人を1人選んで正体を覗き見てください！**", 
-                view=MirrorUseView(user, self.guild_id)
-            )
+            res_embed.description += "\n\n👇 **昼の議論中、怪しいと思った人を1人選んで正体を覗き見てください！**"
+            await interaction.response.edit_message(embed=res_embed, view=MirrorUseView(user, self.guild_id))
         elif item_name == "📝 遺言ノート":
             await interaction.response.send_modal(WillNoteModal(self.guild_id))
         elif item_name == "🛡️ お守り":
-            await interaction.response.edit_message(
-                content=f"🎒 **アイテムを支給されました！**\n\n手に入れたもの: **{item_name}**\n効果: {ITEMS[item_name]}\n\n💡 このアイテムは朝フェーズで自動的に効果が発動します。今夜人狼に襲撃されても生き残ります！", 
-                view=None
-            )
+            res_embed.description += "\n\n💡 このアイテムは朝フェーズで自動的に効果が発動します。"
+            await interaction.response.edit_message(embed=res_embed, view=None)
         elif item_name in ["🍯 泥団子", "🤐 沈黙の御札", "🧪 疑惑の劇薬"]:
-            await interaction.response.edit_message(
-                content=f"🎒 **アイテムを支給されました！**\n\n手に入れたもの: **{item_name}**\n効果: {ITEMS[item_name]}\n\n💡 このアイテムは投票フェーズで使用できます。投票時に『使う』を選んでください。", 
-                view=None
-            )
+            res_embed.description += "\n\n💡 このアイテムは投票フェーズで使用できます。投票時に『使う』を選んでください。"
+            await interaction.response.edit_message(embed=res_embed, view=None)
         else:
-            await interaction.response.edit_message(
-                content=f"🎒 **アイテムを支給されました！**\n\n手に入れたもの: **{item_name}**\n効果: {ITEMS[item_name]}\n\n大切にしまっておいてください。", 
-                view=None
-            )
+            res_embed.description += "\n\n大切にしまっておいてください。"
+            await interaction.response.edit_message(embed=res_embed, view=None)
 
 def reset_items(guild_id: int) -> None:
     """全プレイヤーのアイテムをリセットする"""

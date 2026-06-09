@@ -1,4 +1,4 @@
-import discord
+import discord, time
 from config import get_game, RoleName
 from typing import Optional, List, Union
 
@@ -42,13 +42,21 @@ class ActionSelect(discord.ui.Select):
         if not target_user or target_user not in game.alive_players:
              return await interaction.response.send_message("そのプレイヤーは既に生存していません。", ephemeral=True)
 
-        game.actions[self.actor] = {"action": self.action_label, "target": target_user}
+        # ⚡ クリティカル判定（7秒以内の選択でボーナス）
+        elapsed = time.time() - self.view.start_time
+        is_critical = elapsed < 7.0
+
+        game.actions[self.actor] = {"action": self.action_label, "target": target_user, "is_critical": is_critical}
         game.check_night_actions_complete()
-        await interaction.response.edit_message(content=f"選択完了: 【{target_user.display_name}】に「{self.action_label}」を行います。", view=None)
+        
+        status = "✨ **クリティカル発動！** ⚡" if is_critical else "完了"
+        done_embed = discord.Embed(title=f"✅ 選択{status}", description=f"【{target_user.display_name}】に「**{self.action_label}**」を行います。\n(タイム: {elapsed:.2f}秒)", color=discord.Color.gold() if is_critical else discord.Color.green())
+        await interaction.response.edit_message(embed=done_embed, view=None)
 
 class ActionView(discord.ui.View):
     def __init__(self, actor: discord.Member, action_label: str, guild_id: int, timeout: int = 60):
         super().__init__(timeout=timeout)
+        self.start_time = time.time() # 開始時刻を記録
         self.add_item(ActionSelect(actor, action_label, guild_id))
         self.message: Optional[discord.Message] = None
 
@@ -58,5 +66,6 @@ class ActionView(discord.ui.View):
                 item.disabled = True
         if self.message:
             try:
-                await self.message.edit(content="⌛ 時間切れです。行動を選択できませんでした。", view=self)
+                timeout_embed = discord.Embed(title="⌛ タイムアウト", description="時間切れです。行動を選択できませんでした。", color=discord.Color.red())
+                await self.message.edit(embed=timeout_embed, view=self)
             except: pass

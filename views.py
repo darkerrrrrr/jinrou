@@ -1,5 +1,5 @@
 import discord
-from config import get_game, RoleName
+from config import get_game, RoleName, RoleLiteral
 from discord.ext import commands
 from typing import TYPE_CHECKING, cast
 
@@ -100,8 +100,8 @@ class TimeSettingModal(discord.ui.Modal):
             await interaction.response.send_message("⚠️ 時間は数字で入力してください。", ephemeral=True)
 
 class RoleCountSelect(discord.ui.Select):
-    def __init__(self, guild_id: int, selected_role: str):
-        self.selected_role = selected_role
+    def __init__(self, guild_id: int, selected_role: RoleLiteral):
+        self.selected_role: RoleLiteral = selected_role
         game = get_game(guild_id)
         current = game.role_settings[selected_role]
         limited = [RoleName.SK, RoleName.THIEF, RoleName.SEER, RoleName.HUNTER, RoleName.MADMAN, RoleName.MEDIUM]
@@ -123,7 +123,7 @@ class RoleSelectMenu(discord.ui.Select):
         super().__init__(placeholder="変更したい役職を選択...", options=options)
     async def callback(self, interaction: discord.Interaction):
         v = discord.ui.View()
-        v.add_item(RoleCountSelect(interaction.guild.id, self.values[0]))
+        v.add_item(RoleCountSelect(interaction.guild.id, cast(RoleLiteral, self.values[0])))
         await interaction.response.edit_message(content="枚数を選択:", view=v)
 
 class RoleSettingView(discord.ui.View):

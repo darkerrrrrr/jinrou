@@ -1,5 +1,5 @@
 import discord
-from typing import Optional, Dict, List, Set, Any, TYPE_CHECKING, Union
+from typing import Optional, Dict, List, Set, Any, TYPE_CHECKING, Union, Literal
 import json, os
 import asyncio
 
@@ -16,6 +16,22 @@ class RoleName:
     HUNTER = "狩人"
     SK = "シリアルキラー"
 
+# 役職名や陣営名を限定するための型定義
+RoleLiteral = Literal["人狼", "占い師", "怪盗", "村人", "狂人", "霊媒師", "狩人", "シリアルキラー"]
+TeamLiteral = Literal["村人", "人狼", "シリアルキラー"]
+ItemLiteral = Literal["📢 拡声器", "📝 遺言ノート", "🍯 泥団子", "🛡️ お守り", "🧪 疑惑の劇薬", "🪞 姿写しの鏡", "🤐 沈黙の御札", "なし"]
+
+# アイテムの出現しやすさ（重み付け）を設定
+ITEM_WEIGHTS: Dict[ItemLiteral, int] = {
+    "📝 遺言ノート": 25,   # 最も出やすい
+    "📢 拡声器": 20,       # 出やすい
+    "🛡️ お守り": 15,       # 普通
+    "🪞 姿写しの鏡": 15,   # 普通
+    "🧪 疑惑の劇薬": 10,   # ややレア
+    "🍯 泥団子": 10,       # レア
+    "🤐 沈黙の御札": 5     # 非常にレア
+}
+
 class WerewolfGame:
     """人狼ゲームの状態を管理するクラス"""
     
@@ -23,11 +39,14 @@ class WerewolfGame:
         """ゲーム状態を初期化"""
         self.is_playing: bool = False
         self.players: List[discord.Member] = []            
-        self.roles: Dict[discord.Member, 'BaseRole'] = {}              
+        self.roles: Dict[discord.Member, 'BaseRole'] = {}
         self.alive_players: List[discord.Member] = []      
         self.log_channel: Optional[discord.TextChannel] = None      
         self.dead_channel: Optional[discord.TextChannel] = None     
         self.wolf_channel: Optional[discord.TextChannel] = None     
+        self.wolf_thread: Optional[discord.Thread] = None           
+        self.dead_thread: Optional[discord.Thread] = None           
+        self.vc_locked: bool = False                                # VCのミュート状態を強制維持するか
         self.alive_vc: Optional[discord.VoiceChannel] = None         
         self.dead_vc: Optional[discord.VoiceChannel] = None          
         self.data_channel: Optional[discord.TextChannel] = None      
@@ -36,12 +55,12 @@ class WerewolfGame:
         # 💡 アイテム（拡声器）の通知などを流すメインテキストチャンネルを記憶する変数
         self.text_channel: Optional[discord.TextChannel] = None
 
-        self.discussion_time: int = 180
+        self.discussion_time: int = 150
         self.day_count: int = 1
         self.event_log: List[str] = []
         self.night_time: int = 60
         self.morning_time: int = 15
-        self.role_settings: Dict[str, int] = {
+        self.role_settings: Dict[RoleLiteral, int] = {
             RoleName.WOLF: 1, RoleName.SEER: 1, RoleName.THIEF: 1, RoleName.VILLAGER: 1, 
             RoleName.MADMAN: 0, RoleName.MEDIUM: 0, RoleName.HUNTER: 0, RoleName.SK: 0
         }
@@ -54,7 +73,7 @@ class WerewolfGame:
         
         self.role_dm_messages: Dict[int, List[int]] = {}  # {ユーザーid: [メッセージid, ...]}
         # アイテムシステム関連
-        self.player_items: Dict[int, str] = {}  # {ユーザーid: "アイテム名"}
+        self.player_items: Dict[int, ItemLiteral] = {}  # {ユーザーid: "アイテム名"}
         self.will_notes: Dict[int, str] = {}    # {ユーザーid: "遺言内容"}
         self.silenced_players: Set[int] = set()  # 沈黙の御札でミュートされるプレイヤーID
         
@@ -168,6 +187,7 @@ class WerewolfGame:
             "role_settings": self.role_settings,
             "event_log": self.event_log,
             "player_ids": [p.id for p in self.players],
+            "vc_locked": self.vc_locked,
             "alive_ids": [p.id for p in self.alive_players],
             "roles": {str(p.id): self.roles[p].name for p in self.roles if p in self.roles},
             "actions": {str(m.id): {"action": d["action"], "target": d["target"].id if d["target"] else None} for m, d in self.actions.items()},
@@ -222,6 +242,7 @@ class WerewolfGame:
         self.day_count = data.get("day_count", 1)
         self.role_settings = data.get("role_settings", self.role_settings)
         self.event_log = data.get("event_log", [])
+        self.vc_locked = data.get("vc_locked", False)
         self.players = [guild.get_member(uid) for uid in data.get("player_ids", []) if guild.get_member(uid)]
         self.alive_players = [guild.get_member(uid) for uid in data.get("alive_ids", []) if guild.get_member(uid)]
 

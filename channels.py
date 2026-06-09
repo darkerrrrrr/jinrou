@@ -56,6 +56,13 @@ async def create_game_channels(guild: discord.Guild) -> Optional[discord.Categor
     wolf_overwrites = private_overwrites.copy()
     game.wolf_channel = await guild.create_text_channel("🐺人狼チャット", category=category, overwrites=wolf_overwrites)
     
+    # 🐺人狼用ナレーションスレッドの作成
+    wolf_starter = await game.wolf_channel.send("📢 **人狼ナレーション専用スレッド**\nここでは進行上のアナウンスのみが行われます。")
+    game.wolf_thread = await wolf_starter.create_thread(name="🐺人狼用ナレーション")
+    # プレイヤーがスレッドに書き込めないように設定
+    for p in game.players:
+        await game.wolf_thread.set_permissions(p, send_messages=False)
+    
     # 2. ゲームログと生存者ボイス（これらは全員が見えたり入れたりしてOK）
     # ゲームログは進行中に秘密が漏れないよう、全員非表示にする
     log_overwrites = private_overwrites.copy()
@@ -73,6 +80,14 @@ async def create_game_channels(guild: discord.Guild) -> Optional[discord.Categor
     # 3. 霊界・墓場（デフォルトで全員非表示）
     dead_overwrites = private_overwrites.copy()
     game.dead_channel = await guild.create_text_channel("👻墓場・霊界テキスト", category=category, overwrites=dead_overwrites)
+
+    # 👻霊界用ナレーションスレッドの作成
+    dead_starter = await game.dead_channel.send("📢 **霊界ナレーション専用スレッド**\nここでは進行上のアナウンスのみが行われます。")
+    game.dead_thread = await dead_starter.create_thread(name="👻霊界用ナレーション")
+    # プレイヤーがスレッドに書き込めないように設定
+    for p in game.players:
+        await game.dead_thread.set_permissions(p, send_messages=False)
+
     game.dead_vc = await guild.create_voice_channel("👻墓場・霊界", category=category, overwrites=dead_overwrites)
     
     # 4. データ保持チャンネル（ボット自身のみが読み書き可能にする）
@@ -142,15 +157,21 @@ async def handle_player_death_vc(player: discord.Member, guild: discord.Guild) -
 
 async def mute_all_alive_players(guild: discord.Guild, mute_status: bool) -> None:
     """
-    生存者ボイスチャンネルにいる生存プレイヤーを全員一括でミュート/解除する
-    mute_status = True でマイクミュート、False でミュート解除
+    生存者ボイスチャンネルにいる生存プレイヤーを全員一括でマイクミュート制御する
+    mute_status: Trueでマイクミュート（喋れない）、Falseで解除
     """
     game = get_game(guild.id)
     if not game.alive_vc: return
+
+    tasks = []
     for member in game.alive_vc.members:
         # 生存者ボイスチャンネルの中にいる、かつ「現在ゲームで生存しているプレイヤー」のみを対象にする
         if member in game.alive_players:
-            try:
-                await member.edit(mute=mute_status)
-            except Exception as e:
-                print(f"⚠️ ミュート制御失敗 ({member.display_name}): {e}")
+            # マイクミュートのみを制御し、スピーカー（deafen）には干渉しない
+            tasks.append(member.edit(mute=mute_status))
+    
+    if tasks:
+        try:
+            await asyncio.gather(*tasks)
+        except Exception as e:
+            print(f"⚠️ VC一括制御失敗: {e}")
