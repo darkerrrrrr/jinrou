@@ -19,7 +19,7 @@ class RoleName:
 # 役職名や陣営名を限定するための型定義
 RoleLiteral = Literal["人狼", "占い師", "怪盗", "村人", "狂人", "霊媒師", "狩人", "シリアルキラー"]
 TeamLiteral = Literal["村人", "人狼", "シリアルキラー"]
-ItemLiteral = Literal["📢 拡声器", "📝 遺言ノート", "🍯 泥団子", "🛡️ お守り", "🧪 疑惑の劇薬", "🪞 姿写しの鏡", "🤐 沈黙の御札", "なし"]
+ItemLiteral = Literal["📢 拡声器", "📝 遺言ノート", "🍯 泥団子", "🛡️ お守り", "🧪 疑惑の劇薬", "🪞 姿写しの鏡", "🤐 沈黙の御札", "目隠し", "なし"]
 
 # アイテムの出現しやすさ（重み付け）を設定
 ITEM_WEIGHTS: Dict[ItemLiteral, int] = {
@@ -30,6 +30,7 @@ ITEM_WEIGHTS: Dict[ItemLiteral, int] = {
     "🧪 疑惑の劇薬": 10,   # ややレア
     "🍯 泥団子": 10,       # レア
     "🤐 沈黙の御札": 5     # 非常にレア
+    "目隠し": 10          # ハズレ枠
 }
 
 class WerewolfGame:

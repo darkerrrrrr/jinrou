@@ -1,5 +1,5 @@
 import discord
-import random
+import random, asyncio
 from typing import Optional, cast
 from config import get_game, RoleName, ITEM_WEIGHTS, ItemLiteral
 
@@ -10,7 +10,8 @@ ITEMS = {
     "🛡️ お守り": "【パッシブ】今夜人狼に襲撃されても、1度だけ自動で生き残る（身代わりアイテム）。",
     "🧪 疑惑の劇薬": "【投票用】今日の自分の投票が自動的に「2票分」としてカウントされます。",
     "🪞 姿写しの鏡": "【昼用】生存者1人を指定し、その人が昨日アイテムを引いた（普通の村人だった）かどうかを覗き見ます。",
-    "🤐 沈黙の御札": "【投票用】投票フェーズで指定した1人を、次の日の議論フェーズで発言禁止（マイクミュート）にします。"
+    "🤐 沈黙の御札": "【投票用】投票フェーズで指定した1人を、次の日の議論フェーズで発言禁止（マイクミュート）にします。",
+    "目隠し": "【ハズレ】引いた瞬間、全員のチャットが5秒間見えなくなります。混乱を招きます。"
 }
 
 # 📝 遺言ノートを記入するためのModal
@@ -150,9 +151,65 @@ class ItemDrawView(discord.ui.View):
         elif item_name in ["🍯 泥団子", "🤐 沈黙の御札", "🧪 疑惑の劇薬"]:
             res_embed.description += "\n\n💡 このアイテムは投票フェーズで使用できます。投票時に『使う』を選んでください。"
             await interaction.response.edit_message(embed=res_embed, view=None)
+        elif item_name == "目隠し":
+            res_embed.description += "\n\n💡 引いた瞬間、全員のチャットが5秒間見えなくなります！"
+            await interaction.response.edit_message(embed=res_embed, view=None)
+
+            # 目隠し効果の適用
+            if game.progress_channel:
+                try:
+                    # 先にアナウンス（隠れる前に見せる）
+                    blind_notice = discord.Embed(title="🙈 目隠し発動！", description="不運な誰かがハズレを引きました。\n**5秒間、参加者全員の視界を奪います！**", color=discord.Color.dark_grey())
+                    await game.progress_channel.send(embed=blind_notice)
+                    await asyncio.sleep(1) # 読む猶予
+
+                    # 参加者全員の権限を個別に操作して確実に隠す
+                    # (Discordの仕様上、ロール権限より個人設定が優先されるため)
+                    backup_overwrites = {}
+                    hide_tasks = []
+                    for p in game.players:
+                        backup_overwrites[p] = game.progress_channel.overwrites_for(p)
+                        hide_tasks.append(game.progress_channel.set_permissions(p, view_channel=False))
+                    
+                    await asyncio.gather(*hide_tasks)
+                    
+                    await asyncio.sleep(5) # 5秒間待機
+                    
+                    # 元の権限設定に戻す
+                    restore_tasks = [game.progress_channel.set_permissions(p, overwrite=ov) for p, ov in backup_overwrites.items()]
+                    await asyncio.gather(*restore_tasks)
+                except Exception as e:
+                    print(f"⚠️ 目隠し効果適用失敗: {e}")
         else:
             res_embed.description += "\n\n大切にしまっておいてください。"
             await interaction.response.edit_message(embed=res_embed, view=None)
+
+
+# 📦 議論中の「早い者勝ち」アイテムドロップ用View
+class QuickItemView(discord.ui.View):
+    def __init__(self, guild_id: int):
+        super().__init__(timeout=30)
+        self.guild_id = guild_id
+        self.taken: bool = False
+
+    @discord.ui.button(label="📦 荷物を受け取る！", style=discord.ButtonStyle.success)
+    async def take_item(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self.taken: return
+        
+        game = get_game(self.guild_id)
+        if interaction.user not in game.alive_players:
+            return await interaction.response.send_message("👻 幽霊は荷物を受け取れません...", ephemeral=True)
+
+        self.taken = True
+        self.stop()
+        
+        # 重み付けに基づいたアイテム抽選
+        item_list = list(ITEM_WEIGHTS.keys())
+        item_name = cast(ItemLiteral, random.choices(item_list, weights=[ITEM_WEIGHTS[i] for i in item_list], k=1)[0])
+        game.player_items[interaction.user.id] = item_name
+        
+        embed = discord.Embed(title="🎁 荷物の中身", description=f"{interaction.user.mention} さんが一番早く荷物を受け取りました！\n中身は **{item_name}** でした！", color=discord.Color.green())
+        await interaction.response.edit_message(embed=embed, view=None)
 
 def reset_items(guild_id: int) -> None:
     """全プレイヤーのアイテムをリセットする"""
