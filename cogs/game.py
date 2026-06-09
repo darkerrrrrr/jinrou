@@ -158,23 +158,26 @@ class GameCog(commands.Cog):
                 if not after.mute:
                     try:
                         await member.edit(mute=True)
-                    except:
-                        pass
+                    except discord.Forbidden:
+                        print(f"❌ 権限不足: {member.display_name} のVCミュート強制に失敗しました。Botに「メンバーをミュート」権限があるか確認してください。")
+                    except Exception: pass
             # ☀️ 昼間のアイテム効果（マイクのみ強制オフ）
             elif member.id in game.silenced_players:
                 # マイクがオンになった場合、強制的に「ミュート」に戻す
                 if not after.mute:
                     try:
                         await member.edit(mute=True)
-                    except:
-                        pass
+                    except discord.Forbidden:
+                        print(f"❌ 権限不足: {member.display_name} の沈黙の御札によるVCミュート強制に失敗しました。Botに「メンバーをミュート」権限があるか確認してください。")
+                    except Exception: pass
         # 👻 死亡者が墓場VCにいる場合は、常に喋れるように（ミュートを自動解除）
         elif game.is_playing and game.dead_vc and after.channel == game.dead_vc:
             if after.mute:
                 try:
                     await member.edit(mute=False)
-                except:
-                    pass
+                except discord.Forbidden:
+                    print(f"❌ 権限不足: {member.display_name} の墓場VCでのミュート解除に失敗しました。Botに「メンバーをミュート」権限があるか確認してください。")
+                except Exception: pass
 
     # 分割したメソッドをバインド
     execute_game_start = execute_game_start

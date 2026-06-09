@@ -269,11 +269,19 @@ async def _cleanup_resources(game, guild: discord.Guild):
     game_category_id = game.progress_channel.category_id if game.progress_channel else None
     target_vc = next((vc for vc in guild.voice_channels if vc.category_id != game_category_id), None)
     
-    for vc in [game.alive_vc, game.dead_vc]:
-        if vc:
-            for m in vc.members:
-                try: await m.edit(mute=False, move_to=target_vc)
-                except: pass
+    # 参加者全員を対象にミュート解除を行う（別のVCに移動している可能性も考慮）
+    for p in game.players:
+        if p.voice: # VCに接続している場合のみ操作可能
+            try:
+                # ゲーム用VC内にいる場合は、既存のVC（雑談等）へ移動させる
+                is_in_game_vc = p.voice.channel and p.voice.channel.category_id == game_category_id
+                if is_in_game_vc and target_vc:
+                    await p.edit(mute=False, move_to=target_vc)
+                else:
+                    await p.edit(mute=False)
+            except discord.Forbidden:
+                print(f"❌ 権限不足: {p.display_name} のミュート解除に失敗しました。")
+            except Exception: pass
 
     # 2. チャンネルとカテゴリの削除
     category = game.progress_channel.category if game.progress_channel else None

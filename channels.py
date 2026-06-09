@@ -137,17 +137,18 @@ async def handle_player_death_vc(player: discord.Member, guild: discord.Guild) -
         
     if game.dead_vc:
         try:
-            # 霊界ボイスチャンネルを見えるようにし、接続と発言を許可
-            await game.dead_vc.set_permissions(player, view_channel=True, connect=True, speak=True)
-        except Exception as e:
-            print(f"⚠️ 死亡時のボイスチャンネル権限設定失敗 ({player.display_name}): {e}")
+            await game.dead_vc.set_permissions(player, view_channel=True, connect=True, speak=True) # 霊界ボイスチャンネルを見えるようにし、接続と発言を許可
+        except discord.Forbidden:
+            print(f"❌ 権限不足: {player.display_name} の霊界VC権限設定に失敗しました。Botに「ロールの管理」権限があるか確認してください。")
+        except Exception as e: print(f"⚠️ 死亡時のボイスチャンネル権限設定失敗 ({player.display_name}): {e}")
 
     # 既にボイスチャンネルに入っている場合は、霊界ボイスへ強制移動し、ミュートを解除
     if game.dead_vc and player.voice and player.voice.channel:
         try: 
             await player.edit(mute=False, move_to=game.dead_vc)
-        except Exception as e:
-            print(f"⚠️ ボイスチャンネル強制移動・ミュート解除失敗 ({player.display_name}): {e}")
+        except discord.Forbidden:
+            print(f"❌ 権限不足: {player.display_name} の霊界VCへの移動・ミュート解除に失敗しました。Botに「メンバーを移動」「メンバーをミュート」権限があるか確認してください。")
+        except Exception as e: print(f"⚠️ ボイスチャンネル強制移動・ミュート解除失敗 ({player.display_name}): {e}")
 
 # ==========================================
 # 👇 ここから新しくミュート制御用関数を追加
@@ -171,5 +172,6 @@ async def mute_all_alive_players(guild: discord.Guild, mute_status: bool) -> Non
     if tasks:
         try:
             await asyncio.gather(*tasks)
-        except Exception as e:
-            print(f"⚠️ VC一括制御失敗: {e}")
+        except discord.Forbidden:
+            print(f"❌ 権限不足: VC一括ミュート/解除に失敗しました。Botに「メンバーをミュート」権限があるか確認してください。")
+        except Exception as e: print(f"⚠️ VC一括制御失敗: {e}")

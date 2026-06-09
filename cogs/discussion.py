@@ -131,8 +131,10 @@ async def start_discussion(self: 'GameCog', channel: discord.TextChannel) -> Non
                 if p.voice:
                     try:
                         await p.edit(mute=True) 
-                    except discord.Forbidden: pass
-                    except Exception: pass
+                    except discord.Forbidden:
+                        print(f"❌ 権限不足: {p.display_name} の沈黙の御札によるVCミュートに失敗しました。Botに「メンバーをミュート」権限があるか確認してください。")
+                    except Exception as e:
+                        print(f"⚠️ 沈黙の御札によるVCミュート失敗 ({p.display_name}): {e}")
 
                 # テキストチャンネルの送信権限を剥奪
                 await target_channel.set_permissions(p, send_messages=False)
@@ -148,8 +150,10 @@ async def start_discussion(self: 'GameCog', channel: discord.TextChannel) -> Non
                 try:
                     # マイクミュートを解除する
                     await p.edit(mute=False)
-                except discord.Forbidden: pass
-                except Exception: pass
+                except discord.Forbidden:
+                    print(f"❌ 権限不足: {p.display_name} のVCミュート解除に失敗しました。Botに「メンバーをミュート」権限があるか確認してください。")
+                except Exception as e:
+                    print(f"⚠️ VCミュート解除失敗 ({p.display_name}): {e}")
             
             # テキストチャンネルの送信権限を戻す
             await target_channel.set_permissions(p, overwrite=None)

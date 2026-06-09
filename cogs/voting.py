@@ -72,7 +72,9 @@ class ItemUsageView(discord.ui.View):
                 await dodge_view.wait()
                 dodge_success = dodge_view.success
                 await d_msg.edit(view=None)
-            except: pass
+            except discord.Forbidden:
+                print(f"❌ 権限不足: {self.target_member.display_name} へのDM送信に失敗しました。BotにDM送信権限があるか確認してください。")
+            except Exception: pass
 
         if dodge_success:
             await target_channel.send(embed=discord.Embed(description=f"💨 **【回避成功】** {self.target_member.mention} さんが反射神経で {self.item_name} をかわしました！", color=discord.Color.blue()), silent=True)
@@ -89,7 +91,9 @@ class ItemUsageView(discord.ui.View):
             try:
                 dm_embed = discord.Embed(title="🍯 泥団子を投げられました！", description=f"{self.voter.display_name} さんから泥団子を投げられ、投票権を奪われました。", color=discord.Color.dark_orange())
                 await self.target_member.send(embed=dm_embed)
-            except: pass
+            except discord.Forbidden:
+                print(f"❌ 権限不足: {self.target_member.display_name} へのDM送信に失敗しました。BotにDM送信権限があるか確認してください。")
+            except Exception: pass
             
             await game.save_state(button_interaction.guild)
             if game.log_channel:
