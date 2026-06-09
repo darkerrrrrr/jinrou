@@ -59,7 +59,7 @@ class MegaphoneUseView(discord.ui.View):
         if hasattr(game, 'text_channel') and game.text_channel:
             embed = discord.Embed(
                 title="🚨 拡声器発動！",
-                description=f"📣 **{user.mention} さんが注目を求めています！**\n\n「全員静かに！私の話を聞いてください！」\n\n議論の手を止め、彼の言葉に耳を傾けましょう。",
+                description=f"📣 **{user.display_name} さんが注目を求めています！**\n\n「全員静かに！私の話を聞いてください！」\n\n議論の手を止め、彼の言葉に耳を傾けましょう。",
                 color=discord.Color.red()
             )
             await game.text_channel.send(embed=embed)
@@ -224,7 +224,7 @@ class QuickItemView(discord.ui.View):
         item_name = cast(ItemLiteral, random.choices(item_list, weights=[ITEM_WEIGHTS[i] for i in item_list], k=1)[0])
         game.player_items[interaction.user.id] = item_name
         
-        embed = discord.Embed(title="🎁 荷物の中身", description=f"{interaction.user.mention} さんが一番早く荷物を受け取りました！\n中身は **{item_name}** でした！", color=discord.Color.green())
+        embed = discord.Embed(title="🎁 荷物の中身", description=f"{interaction.user.display_name} さんが一番早く荷物を受け取りました！\n中身は **{item_name}** でした！", color=discord.Color.green())
         await interaction.response.edit_message(embed=embed, view=None)
 
 def reset_items(guild_id: int) -> None:

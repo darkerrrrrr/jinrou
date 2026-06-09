@@ -97,7 +97,7 @@ async def start_night(self: 'GameCog', channel: discord.TextChannel) -> None:
             except Exception as e:
                 print(f"⚠️ {player.display_name} ({role.name}) への能力通知DM失敗: {e}")
                 if game.log_channel:
-                    await game.log_channel.send(f"⚠️ {player.mention} ({role.name}) へのDM送信に失敗しました。")
+                    await game.log_channel.send(f"⚠️ {player.display_name} ({role.name}) へのDM送信に失敗しました。")
                 # DM失敗時は「行動なし」として登録し、進行を妨げないようにする
                 game.actions[player] = {"action": "skipped", "target": None, "is_critical": False}
                 game.check_night_actions_complete()
@@ -110,7 +110,7 @@ async def start_night(self: 'GameCog', channel: discord.TextChannel) -> None:
             except Exception as e:
                 print(f"⚠️ {player.display_name} へのアイテムガチャDM失敗: {e}")
                 if game.log_channel:
-                    await game.log_channel.send(f"⚠️ {player.mention} へのアイテムガチャDMに失敗しました。")
+                    await game.log_channel.send(f"⚠️ {player.display_name} へのアイテムガチャDMに失敗しました。")
                 # DM失敗時は Literal 定義に含まれる「なし」を代入して型安全を確保
                 game.player_items[player.id] = "なし"
                 game.check_night_actions_complete()

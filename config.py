@@ -170,6 +170,9 @@ class WerewolfGame:
         sk_count = alive_roles.count(RoleName.SK)
         total_alive = len(alive_roles)
         
+        # テスト用：0日目（最初の朝）は勝利判定を行わない
+        if self.day_count == 0: return None
+
         # 狂人、村人、占い師、霊媒師、狩人、怪盗（人狼とSK以外）はすべて人間としてカウント
         human_count = total_alive - wolf_count - sk_count
         

@@ -138,7 +138,7 @@ async def start_discussion(self: 'GameCog', channel: discord.TextChannel) -> Non
 
                 # テキストチャンネルの送信権限を剥奪
                 await target_channel.set_permissions(p, send_messages=False)
-                mute_embed = discord.Embed(description=f"🤐 **{p.mention} さんは「沈黙の御札」の呪いにより、今日の発言が禁止されています。**", color=discord.Color.dark_grey())
+                mute_embed = discord.Embed(description=f"🤐 **{p.display_name} さんは「沈黙の御札」の呪いにより、今日の発言が禁止されています。**", color=discord.Color.dark_grey())
                 await target_channel.send(embed=mute_embed)
             else:
                 alive_listeners.append(p)

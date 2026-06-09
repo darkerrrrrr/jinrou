@@ -31,6 +31,14 @@ async def execute_game_start(self: 'GameCog', channel: discord.TextChannel) -> N
     """
     game = get_game(channel.guild.id)
 
+    # ⚠️ 参加人数が少なすぎると勝利条件が即座に満たされて終了してしまうため制限
+    MIN_PLAYERS = 4
+    if len(game.players) < MIN_PLAYERS:
+        return await channel.send(embed=discord.Embed(
+            description=f"❌ 参加人数が足りません。最低 **{MIN_PLAYERS}人** 以上必要です。（現在: {len(game.players)}人）",
+            color=discord.Color.red()
+        ))
+
     # 🚀 重複起動を完全に防止
     if game.is_playing:
         return
@@ -96,7 +104,7 @@ async def execute_game_start(self: 'GameCog', channel: discord.TextChannel) -> N
             dm_msg = await p.send(embed=role_reveal_embed, silent=not is_wolf)
             game.add_dm_message(p.id, dm_msg.id)
         except Exception as e:
-            err_msg = f"⚠️ {p.mention} への役職通知DM送信に失敗しました。設定を確認してください。"
+            err_msg = f"⚠️ {p.display_name} への役職通知DM送信に失敗しました。設定を確認してください。"
             print(f"❌ {err_msg}: {e}")
             if game.log_channel:
                 await game.log_channel.send(err_msg)
@@ -244,7 +252,7 @@ async def check_game_over(self: 'GameCog', channel: discord.TextChannel) -> bool
         roles_reveal = ""
         for p, role in game.roles.items():
             status = "🟢 生存" if p in game.alive_players else "💀 死亡"
-            roles_reveal += f"・{p.mention} : **{role.name}** ({status})\n"
+            roles_reveal += f"・{p.display_name} : **{role.name}** ({status})\n"
         embed.add_field(name="👥 全員の配役", value=roles_reveal)
         
         # タイムラインの追加 (1024文字制限を考慮して分割)

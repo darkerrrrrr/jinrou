@@ -77,7 +77,7 @@ class ItemUsageView(discord.ui.View):
             except Exception: pass
 
         if dodge_success:
-            await target_channel.send(embed=discord.Embed(description=f"💨 **【回避成功】** {self.target_member.mention} さんが反射神経で {self.item_name} をかわしました！", color=discord.Color.blue()), silent=True)
+            await target_channel.send(embed=discord.Embed(description=f"💨 **【回避成功】** {self.target_member.display_name} さんが反射神経で {self.item_name} をかわしました！", color=discord.Color.blue()), silent=True)
             self.stop()
             return
         
@@ -98,18 +98,18 @@ class ItemUsageView(discord.ui.View):
             await game.save_state(button_interaction.guild)
             if game.log_channel:
                 await game.log_channel.send(embed=discord.Embed(description=f"🍯 {self.voter.display_name} が {self.target_member.display_name} の投票権を剥奪。", color=discord.Color.dark_orange()))
-            await target_channel.send(embed=discord.Embed(description=f"🍯 **【泥団子発動】** {self.voter.mention} さんが {self.target_member.mention} さんの投票権を奪いました！", color=discord.Color.dark_orange()), silent=True)
+            await target_channel.send(embed=discord.Embed(description=f"🍯 **【泥団子発動】** {self.voter.display_name} さんが {self.target_member.display_name} さんの投票権を奪いました！", color=discord.Color.dark_orange()), silent=True)
         elif self.item_name == "🤐 沈黙の御札":
             game.silenced_players.add(self.target_member.id)
             await game.save_state(button_interaction.guild)
             if game.log_channel:
                 await game.log_channel.send(embed=discord.Embed(description=f"🤐 {self.voter.display_name} が {self.target_member.display_name} に翌日の沈黙呪いを付与。", color=discord.Color.dark_grey()))
-            await target_channel.send(embed=discord.Embed(description=f"🤐 **【沈黙の御札発動】** {self.voter.mention} さんが {self.target_member.mention} さんに呪いの札を貼りました！", color=discord.Color.dark_grey()), silent=True)
+            await target_channel.send(embed=discord.Embed(description=f"🤐 **【沈黙の御札発動】** {self.voter.display_name} さんが {self.target_member.display_name} さんに呪いの札を貼りました！", color=discord.Color.dark_grey()), silent=True)
         elif self.item_name == "🧪 疑惑の劇薬":
             await game.save_state(button_interaction.guild)
             if game.log_channel:
                 await game.log_channel.send(embed=discord.Embed(description=f"🧪 {self.voter.display_name} は疑惑の劇薬により2票分を投票。", color=discord.Color.purple()))
-            await target_channel.send(embed=discord.Embed(description=f"🧪 **【疑惑の劇薬発動】** {self.voter.mention} さんの投票は2票分として集計されます！", color=discord.Color.purple()), silent=True)
+            await target_channel.send(embed=discord.Embed(description=f"🧪 **【疑惑の劇薬発動】** {self.voter.display_name} さんの投票は2票分として集計されます！", color=discord.Color.purple()), silent=True)
         
         self.stop()
 
@@ -152,7 +152,7 @@ class VoteSelect(discord.ui.Select):
 
         if has_voting_item:
             item_view = ItemUsageView(voter, target_member, str(player_item))
-            item_embed = discord.Embed(title="🎁 アイテム使用確認", description=f"アイテム **{player_item}** を持っています。\n{target_member.mention} さんに対して使用しますか？", color=discord.Color.blue())
+            item_embed = discord.Embed(title="🎁 アイテム使用確認", description=f"アイテム **{player_item}** を持っています。\n{target_member.display_name} さんに対して使用しますか？", color=discord.Color.blue())
             await interaction.response.send_message(embed=item_embed, view=item_view, ephemeral=True)
             await item_view.wait()
             item_was_used = bool(item_view.used)
@@ -206,7 +206,7 @@ async def start_voting(self: 'GameCog', channel: discord.TextChannel) -> None:
     # 投票しなかった人の発表
     non_voters = [p for p in game.alive_players if p.id not in game.voted_user_ids and p.id not in game.banned_voters]
     if non_voters:
-        nv_embed = discord.Embed(title="⌛ 投票終了", description=f"未投票者: {', '.join([p.mention for p in non_voters])}\n※棄権は村を滅ぼす原因となります！", color=discord.Color.red())
+        nv_embed = discord.Embed(title="⌛ 投票終了", description=f"未投票者: {', '.join([p.display_name for p in non_voters])}\n※棄権は村を滅ぼす原因となります！", color=discord.Color.red())
         await target_channel.send(embed=nv_embed, silent=True)
 
     # 最終的な集計
@@ -244,7 +244,7 @@ async def start_voting(self: 'GameCog', channel: discord.TextChannel) -> None:
                 await view.wait()
                 
                 if view.winner:
-                    await target_channel.send(embed=discord.Embed(description=f"⚡ {view.winner.mention} が凄まじい反応速度で追放を免れました！", color=discord.Color.green()))
+                    await target_channel.send(embed=discord.Embed(description=f"⚡ {view.winner.display_name} が凄まじい反応速度で追放を免れました！", color=discord.Color.green()))
                     most_voted_ids = [pid for pid in most_voted_ids if pid != view.winner.id]
                 
                 # 生き残った人以外からランダムに選ぶ

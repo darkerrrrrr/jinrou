@@ -16,13 +16,16 @@ class RecruitView(discord.ui.View):
         embed = discord.Embed(title="🐺 人狼ゲーム", color=discord.Color.dark_red())
         
         embed.add_field(name="👥 配役構成", value=roles_text if roles_text else "未設定")
-        embed.add_field(name=f"🎮 参加者 ({len(game.players)}人)", value="\n".join([p.mention for p in game.players]) if game.players else "誰も参加していません。")
+        embed.add_field(name=f"🎮 参加者 ({len(game.players)}/14人)", value="\n".join([p.display_name for p in game.players]) if game.players else "誰も参加していません。")
+        embed.set_footer(text="※最低4名から開始可能です（最大14名まで）")
         return embed
 
     @discord.ui.button(label="参加", style=discord.ButtonStyle.green, custom_id="join_btn")
     async def join(self, interaction: discord.Interaction, button: discord.ui.Button):
         game = get_game(interaction.guild.id)
         if interaction.user not in game.players:
+            if len(game.players) >= 14:
+                return await interaction.response.send_message(embed=discord.Embed(description="⚠️ 定員（14名）に達したため、これ以上参加できません。", color=discord.Color.orange()), ephemeral=True)
             game.players.append(interaction.user)
             await interaction.response.edit_message(embed=self.create_recruit_embed(interaction.guild.id), view=self)
 
@@ -52,8 +55,8 @@ class RecruitView(discord.ui.View):
         game = get_game(interaction.guild.id)
         if not game.host or interaction.user.id != game.host.id: 
             return await interaction.response.send_message(embed=discord.Embed(description="❌ 主催者のみ可能です。", color=discord.Color.red()), ephemeral=True)
-        # テストプレイ用に1人以上で開始可能に変更
-        if len(game.players) < 1: return await interaction.response.send_message(embed=discord.Embed(description="⚠️ 参加者がいないため開始できません。", color=discord.Color.orange()), ephemeral=True)
+        
+        if len(game.players) < 4: return await interaction.response.send_message(embed=discord.Embed(description="⚠️ 参加人数が足りません。最低 **4名** 必要です。", color=discord.Color.orange()), ephemeral=True)
         
         channel = interaction.channel
         if not isinstance(channel, (discord.TextChannel, discord.Thread)):
