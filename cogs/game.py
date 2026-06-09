@@ -150,7 +150,15 @@ class GameCog(commands.Cog):
         """ボイス状態を監視し、ロック中の勝手なミュート解除を防止する"""
         if not member.guild: return
         game = get_game(member.guild.id)
-        if not game.is_playing: return
+
+        # 【重要】ゲームが実行されていないのにサーバーミュートされている場合、自動で解除する（事後クリーンアップ）
+        if not game.is_playing:
+            if after.channel and after.mute:
+                try:
+                    await member.edit(mute=False)
+                except:
+                    pass
+            return
 
         if member in game.alive_players:
             # 🌙 夜間・投票時間のロック（マイクを強制的にミュート）
