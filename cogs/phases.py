@@ -105,6 +105,15 @@ async def execute_game_start(self: 'GameCog', channel: discord.TextChannel) -> N
     await channels.create_game_channels(channel.guild)
     await channels.setup_wolf_permissions(channel.guild)
 
+    # ⚠️ チャンネル作成に失敗した場合は、エラーを表示して停止させる
+    if not game.progress_channel:
+        game.is_playing = False
+        return await channel.send(embed=discord.Embed(
+            description="❌ ゲームチャンネルの作成に失敗しました。Botに「チャンネルの管理」権限があるか確認してください。",
+            color=discord.Color.red()
+        ))
+
+    # 📢 以降のゲームメッセージは必ず「📢ゲーム進行」チャンネルに送る
     target_channel = game.progress_channel or channel
     game.alive_players = game.players.copy()
     game.thief_action_done = False
@@ -127,16 +136,18 @@ async def execute_game_start(self: 'GameCog', channel: discord.TextChannel) -> N
     )
     start_embed.set_footer(text="※プレイヤーは生存者ボイスチャンネルに移動してください。\n夜フェーズに入ると、DMで行動を促されます。")
     
-    await channel.send(embed=start_embed, silent=True)
+    # 元のチャンネルには「開始しました」という合図と、新チャンネルへのリンクのみ送る
+    start_notice = discord.Embed(description=f"🚀 ゲームを開始しました！\n進行は {target_channel.mention} で行います。", color=discord.Color.green())
+    await channel.send(embed=start_notice, silent=True)
+    await target_channel.send(embed=start_embed, silent=True)
     await game.log_channel.send(embed=discord.Embed(description="📊 **ゲームログの記録を開始しました**", color=discord.Color.blue()), silent=True)
 
-    # 🔊 ボイスチャンネル移動の案内は「元チャンネル」と「新チャンネル」の両方に送る
+    # 🔊 ボイスチャンネル移動の案内は「新チャンネル」に送る
     wait_embed = discord.Embed(
         title="🔊 ボイスチャンネル移動",
         description="⏳ 20秒後にゲームを開始します。未入室の方は **🔊生存者村** へ入ってください。",
         color=discord.Color.blue()
     )
-    await channel.send(embed=wait_embed, silent=True, delete_after=20)
     await target_channel.send(embed=wait_embed, silent=True)
 
     # 他のボイスチャンネルにいるプレイヤーを「🔊生存者村」へ強制移動させる

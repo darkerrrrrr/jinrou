@@ -62,8 +62,8 @@ class WerewolfGame:
         self.night_time: int = 60
         self.morning_time: int = 30
         self.role_settings: Dict[RoleLiteral, int] = {
-            RoleName.WOLF: 1, RoleName.SEER: 1, RoleName.THIEF: 1, RoleName.VILLAGER: 1, 
-            RoleName.MADMAN: 0, RoleName.MEDIUM: 0, RoleName.HUNTER: 0, RoleName.SK: 0
+            RoleName.WOLF: 3, RoleName.SEER: 1, RoleName.THIEF: 1, RoleName.VILLAGER: 6, 
+            RoleName.MADMAN: 1, RoleName.MEDIUM: 1, RoleName.HUNTER: 1, RoleName.SK: 0
         }
         self.actions: Dict[discord.Member, Dict] = {}
         self.last_executed: Optional[discord.Member] = None
@@ -127,10 +127,6 @@ class WerewolfGame:
 
     def check_night_actions_complete(self):
         """全員が夜の行動を終えたかチェックする"""
-        # 第0夜は人狼の作戦会議時間を確保するため、全員が行動を終えても即座に終了させない
-        if self.day_count == 0:
-            return
-            
         required_count = 0
         if not self.roles or not self.players: return
         

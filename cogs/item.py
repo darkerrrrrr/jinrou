@@ -184,6 +184,22 @@ class ItemDrawView(discord.ui.View):
             res_embed.description += "\n\n大切にしまっておいてください。"
             await interaction.response.edit_message(embed=res_embed, view=None)
 
+async def send_item_notification(player: discord.Member, item_name: ItemLiteral, guild_id: int):
+    """プレイヤーにアイテム獲得/所持の通知と、必要なら操作ボタンを送信する"""
+    embed = discord.Embed(title="🎒 アイテム所持確認", color=discord.Color.gold())
+    embed.description = f"現在、あなたは **{item_name}** を持っています。\n効果: {ITEMS.get(item_name, 'なし')}"
+    
+    view = None
+    if item_name == "📢 拡声器":
+        view = MegaphoneUseView(guild_id)
+    elif item_name == "🪞 姿写しの鏡":
+        view = MirrorUseView(player, guild_id)
+    
+    try:
+        await player.send(embed=embed, view=view, silent=True)
+    except:
+        pass
+
 
 # 📦 議論中の「早い者勝ち」アイテムドロップ用View
 class QuickItemView(discord.ui.View):

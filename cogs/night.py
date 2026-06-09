@@ -7,7 +7,7 @@ if TYPE_CHECKING:
     from cogs.game import GameCog
 
 # アイテムシステム関連
-from cogs.item import reset_items, ItemDrawView, get_player_item, use_player_item
+from cogs.item import reset_items, ItemDrawView, get_player_item, use_player_item, send_item_notification
 
 async def start_night(self: 'GameCog', channel: discord.TextChannel) -> None:
     """
@@ -18,6 +18,12 @@ async def start_night(self: 'GameCog', channel: discord.TextChannel) -> None:
     """
     game = get_game(channel.guild.id)
     game.actions = {}
+    
+    # 🗳️ 前日の投票データをクリア（これがないと翌日投票できなくなる）
+    game.voted_user_ids.clear()
+    game.vote_details.clear()
+    game.banned_voters.clear()
+
     game.night_skip_event.clear()
     
     # 死亡したプレイヤーのアイテムを削除
@@ -85,9 +91,9 @@ async def start_night(self: 'GameCog', channel: discord.TextChannel) -> None:
             try:
                 view = ActionView(player, label, channel.guild.id, timeout=game.night_time)
                 action_embed = discord.Embed(title=f"🌙 夜のアクション：{role.name}", description=f"今夜の「**{label}**」対象者を選んでください。", color=discord.Color.dark_purple())
-                msg = await player.send(embed=action_embed, view=view, silent=not is_wolf)
-                game.add_dm_message(player.id, msg.id)
-                view.message = msg # タイムアウト時にメッセージを編集できるように保持
+                dm_msg = await player.send(embed=action_embed, view=view, silent=not is_wolf)
+                game.add_dm_message(player.id, dm_msg.id)
+                view.message = dm_msg # タイムアウト時にメッセージを編集できるように保持
             except Exception as e:
                 print(f"⚠️ {player.display_name} ({role.name}) への能力通知DM失敗: {e}")
                 if game.log_channel:
@@ -153,6 +159,10 @@ async def process_night_results(self: 'GameCog', channel: discord.TextChannel) -
                     target_item = game.player_items.pop(target.id, None)
                     if target_item: game.player_items[actor.id] = target_item
                     if actor_item: game.player_items[target.id] = actor_item
+                    
+                    # 盗んだアイテムが「拡声器」などなら、怪盗にボタンを送る
+                    if target_item:
+                        await send_item_notification(actor, target_item, channel.guild.id)
 
                     # もし人狼を奪った場合、人狼チャットを見れるように権限を更新
                     if target_role.name == RoleName.WOLF:
