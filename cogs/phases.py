@@ -134,15 +134,31 @@ async def execute_game_start(self: 'GameCog', channel: discord.TextChannel) -> N
     await channel.send(embed=wait_embed, silent=True, delete_after=20)
 
     # 他のボイスチャンネルにいるプレイヤーを「🔊生存者村」へ強制移動させる
+    vc_missing = []
     for p in game.players:
         if p.voice and p.voice.channel and p.voice.channel != game.alive_vc:
             try:
                 await p.move_to(game.alive_vc)
             except Exception:
                 pass # 権限不足などで移動できない場合は無視して手動移動を促す
+        elif not p.voice:
+            vc_missing.append(p.display_name)
+
+    if vc_missing:
+        # 必要であれば、ここで「全員揃っていないので開始できません」とエラーを出して止めることも可能です
+        pass
 
     await asyncio.sleep(20)
     
+    # ☀️ 0日目の朝：ゲームの幕開けを宣言
+    opening_embed = discord.Embed(
+        title="☀️ 0日目：朝",
+        description="村に朝が来ました。現在、生存者は全員無事です。\n\nまもなく夜が訪れます。役職者の方は夜の行動に備えてください。",
+        color=discord.Color.orange()
+    )
+    await channel.send(embed=opening_embed, silent=True)
+    await asyncio.sleep(5) # 状況を確認する短い猶予
+
     await game.save_state(channel.guild)
     await self.start_night(channel)
 

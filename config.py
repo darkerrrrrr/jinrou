@@ -60,7 +60,7 @@ class WerewolfGame:
         self.day_count: int = 0
         self.event_log: List[str] = []
         self.night_time: int = 60
-        self.morning_time: int = 15
+        self.morning_time: int = 30
         self.role_settings: Dict[RoleLiteral, int] = {
             RoleName.WOLF: 1, RoleName.SEER: 1, RoleName.THIEF: 1, RoleName.VILLAGER: 1, 
             RoleName.MADMAN: 0, RoleName.MEDIUM: 0, RoleName.HUNTER: 0, RoleName.SK: 0
@@ -127,6 +127,10 @@ class WerewolfGame:
 
     def check_night_actions_complete(self):
         """全員が夜の行動を終えたかチェックする"""
+        # 第0夜は人狼の作戦会議時間を確保するため、全員が行動を終えても即座に終了させない
+        if self.day_count == 0:
+            return
+            
         required_count = 0
         if not self.roles or not self.players: return
         

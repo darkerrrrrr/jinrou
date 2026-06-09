@@ -72,7 +72,7 @@ class RecruitView(discord.ui.View):
 class TimeSettingModal(discord.ui.Modal):
     discussion_input = discord.ui.TextInput(label='昼の議論時間 (秒)', default='180', max_length=4)
     night_input = discord.ui.TextInput(label='夜の行動時間 (秒)', default='60', max_length=4)
-    morning_input = discord.ui.TextInput(label='朝の結果発表時間 (秒)', default='15', max_length=4)
+    morning_input = discord.ui.TextInput(label='朝の結果発表時間 (秒)', default='30', max_length=4)
     def __init__(self, parent_view):
         super().__init__(title='ゲーム時間の設定')
         self.parent_view = parent_view

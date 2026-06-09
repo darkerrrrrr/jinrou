@@ -31,7 +31,7 @@ class GameCog(commands.Cog):
     # 💡 コマンド名を「game_setup」に変更し、Discord.pyのシステム用setup関数との衝突を防止
     # サーバー上での入力は「!game_setup」になります
     @commands.command(name="game_setup")
-    @commands.has_permissions(administrator=True)
+    @commands.has_permissions(manage_guild=True)
     async def game_setup(self, ctx):
         game = get_game(ctx.guild.id)
         game.reset_state()
@@ -40,8 +40,16 @@ class GameCog(commands.Cog):
         view = RecruitView()
         game.recruit_message = await ctx.send(embed=view.create_recruit_embed(ctx.guild.id), view=view)
 
+    @game_setup.error
+    async def game_setup_error(self, ctx, error):
+        if isinstance(error, commands.MissingPermissions):
+            await ctx.send(embed=discord.Embed(
+                description="❌ このコマンドを実行するには「サーバーの管理」権限が必要です。\n権限をさらに緩和したい場合は、プログラムの `game_setup` の権限設定を修正してください。",
+                color=discord.Color.red()
+            ), delete_after=10)
+
     @commands.command(name="game_resume")
-    @commands.has_permissions(administrator=True)
+    @commands.has_permissions(manage_guild=True)
     async def game_resume(self, ctx):
         """保存されたデータからゲームを復旧する"""
         file_path = f"data/game_{ctx.guild.id}.json"
@@ -54,6 +62,14 @@ class GameCog(commands.Cog):
         
         game.load_from_dict(data, ctx.guild)
         await ctx.send(embed=discord.Embed(description=f"✅ {game.day_count}日目の状態からゲームを復旧しました。", color=discord.Color.green()))
+
+    @game_resume.error
+    async def game_resume_error(self, ctx, error):
+        if isinstance(error, commands.MissingPermissions):
+            await ctx.send(embed=discord.Embed(
+                description="❌ ゲームを復旧するには「サーバーの管理」権限が必要です。",
+                color=discord.Color.red()
+            ), delete_after=10)
 
     @commands.command(name="game_stats")
     async def game_stats(self, ctx):

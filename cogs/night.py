@@ -127,6 +127,10 @@ async def process_night_results(self: 'GameCog', channel: discord.TextChannel) -
     """
     game = get_game(channel.guild.id)
     target_channel = game.progress_channel or channel
+
+    # ☀️ 朝になったタイミングで日数を進める
+    game.day_count += 1
+
     if game.log_channel:
         await game.log_channel.send(embed=discord.Embed(description="☀️ 朝フェーズの処理を開始しました。", color=discord.Color.orange()))
     
@@ -154,6 +158,7 @@ async def process_night_results(self: 'GameCog', channel: discord.TextChannel) -
                     if target_role.name == RoleName.WOLF:
                         await channels.setup_wolf_permissions(channel.guild)
 
+                    game.event_log.append(f"🎭 怪盗 {actor.display_name} が {target.display_name} の役職({target_role.name})を奪いました")
                     try:
                         thief_embed = discord.Embed(title="🎭 強奪成功", description=f"{target.display_name} から役職を奪いました！\nあなたの新しい役職は 【**{target_role.name}**】 です。", color=discord.Color.gold())
                         t_msg = await actor.send(embed=thief_embed, silent=True)
@@ -286,12 +291,17 @@ async def process_night_results(self: 'GameCog', channel: discord.TextChannel) -
                 )
                 await target_channel.send(embed=will_embed, silent=True)
                 use_player_item(channel.guild.id, player_id)
+                await asyncio.sleep(3) # 遺言1つにつき3秒追加
     else:
-        embed = discord.Embed(title=f"☀️ {game.day_count}日目：朝の結果発表", color=discord.Color.green())
-        embed.description = "🛡️ 昨夜は誰も犠牲になりませんでした。"
-        await target_channel.send(embed=embed, silent=True)
-        if game.dead_thread:
-            await game.dead_thread.send(embed=discord.Embed(description=f"☀️ {game.day_count}日目：朝は平穏でした。", color=discord.Color.green()), silent=True)
+        if game.day_count == 1:
+            # 0日目の朝は誰も死なないため、結果発表を省略して夜明けの通知のみにする
+            await target_channel.send(embed=discord.Embed(description="☀️ 夜が明け、最初の朝が来ました。これより1日目の議論を開始します。", color=discord.Color.green()), silent=True)
+        else:
+            embed = discord.Embed(title=f"☀️ {game.day_count}日目：朝の結果発表", color=discord.Color.green())
+            embed.description = "🛡️ 昨夜は誰も犠牲になりませんでした。"
+            await target_channel.send(embed=embed, silent=True)
+            if game.dead_thread:
+                await game.dead_thread.send(embed=discord.Embed(description=f"☀️ {game.day_count}日目：朝は平穏でした。", color=discord.Color.green()), silent=True)
 
         if game.log_channel:
             await game.log_channel.send(embed=discord.Embed(description="🛡️ 犠牲者は出ませんでした。", color=discord.Color.green()))
@@ -299,9 +309,11 @@ async def process_night_results(self: 'GameCog', channel: discord.TextChannel) -
     if await self.check_game_over(channel): 
         return
 
-    game.day_count += 1
     await game.save_state(channel.guild) # 死亡処理と日付更新を保存
-    await asyncio.sleep(game.morning_time)
+    
+    # 0日目の朝だけは、結果発表の待ち時間を短縮（5秒）してテンポを上げる
+    wait_time = 5 if game.day_count == 1 else game.morning_time
+    await asyncio.sleep(wait_time)
     await self.start_discussion(channel)
 
 # Discord.py の拡張ロードシステム用関数
