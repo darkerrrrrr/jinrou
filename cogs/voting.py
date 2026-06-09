@@ -259,6 +259,8 @@ async def start_voting(self: 'GameCog', channel: discord.TextChannel) -> None:
             except Exception as e:
                 print(f"⚠️ 処刑対象プレイヤー取得失敗 (ID: {most_voted_id}): {e}")
                 await target_channel.send(embed=discord.Embed(description="⚠️ 処刑対象のプレイヤー情報を取得できませんでした。", color=discord.Color.red()), silent=True)
+                if not await self.check_game_over(channel):
+                    await self.start_night(channel)
                 return
 
         if isinstance(executed_user, discord.Member) and executed_user in game.alive_players:

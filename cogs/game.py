@@ -165,6 +165,13 @@ class GameCog(commands.Cog):
             await ctx.send(embed=discord.Embed(description=f"❌ 予期せぬエラーが発生しました: {error}", color=discord.Color.red()), delete_after=5)
 
     @commands.Cog.listener()
+    async def on_command_error(self, ctx, error):
+        """グローバルなエラーハンドリング（コマンドが見つからない場合など）"""
+        if isinstance(error, commands.CommandNotFound):
+            # 間違ったコマンド（!game setupなど）が打たれても無視するか、正しい案内を出す
+            return
+
+    @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
         """ボイス状態を監視し、ロック中の勝手なミュート解除を防止する"""
         if not member.guild: return
