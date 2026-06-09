@@ -188,15 +188,19 @@ async def check_game_over(self: 'GameCog', channel: discord.TextChannel) -> bool
 
                 # 2. 勝利ロールの付与
                 try:
-                    role_name = "🐺人狼勝利者"
-                    role = discord.utils.get(channel.guild.roles, name=role_name)
-                    if not role:
-                        role = await channel.guild.create_role(name=role_name, color=discord.Color.gold(), reason="人狼ゲーム勝利者用")
-                    
-                    for winner_id in winners:
-                        member = channel.guild.get_member(winner_id)
-                        if member:
-                            await member.add_roles(role)
+                    for p, role_obj in game.roles.items():
+                        if getattr(role_obj, "team", "") == winner_team:
+                            # 要望通り「人狼ゲーム勝利者(役職名)」という形式で動的にロールを作成・付与
+                            role_name = f"人狼ゲーム勝利者({role_obj.name})"
+                            
+                            role = discord.utils.get(channel.guild.roles, name=role_name)
+                            if not role:
+                                role = await channel.guild.create_role(
+                                    name=role_name, 
+                                    color=discord.Color.gold(), 
+                                    reason=f"人狼ゲーム勝利者({role_obj.name})用"
+                                )
+                            await p.add_roles(role)
                 except Exception as e:
                     print(f"⚠️ ロール付与失敗: {e}")
         
