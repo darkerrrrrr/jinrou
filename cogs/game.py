@@ -53,14 +53,14 @@ class GameCog(commands.Cog):
             data = json.load(f)
         
         game.load_from_dict(data, ctx.guild)
-        await ctx.send(f"✅ {game.day_count}日目の状態からゲームを復旧しました。")
+        await ctx.send(embed=discord.Embed(description=f"✅ {game.day_count}日目の状態からゲームを復旧しました。", color=discord.Color.green()))
 
     @commands.command(name="game_stats")
     async def game_stats(self, ctx):
         """通算勝利数ランキングを表示する"""
         stats = get_leaderboard(ctx.guild.id)
         if not stats:
-            return await ctx.send("📊 まだ統計データがありません。ゲームを完了させてください！")
+            return await ctx.send(embed=discord.Embed(description="📊 まだ統計データがありません。ゲームを完了させてください！", color=discord.Color.orange()))
 
         # スコア順にソート
         # (村人勝 + 人狼勝 + SK勝) の合計が多い順
@@ -101,7 +101,7 @@ class GameCog(commands.Cog):
 
             # コマンド自体のメッセージも含めて削除するため、指定数+1を削除します
             deleted = await ctx.channel.purge(limit=amount + 1)
-            await ctx.send(f"🧹 {len(deleted)-1}件のメッセージを削除しました。", delete_after=5)
+            await ctx.send(embed=discord.Embed(description=f"🧹 {len(deleted)-1}件のメッセージを削除しました。", color=discord.Color.blue()), delete_after=5)
         else:
             # DM内での処理 (purgeが使えないため1つずつ削除)
             count = 0
@@ -112,7 +112,7 @@ class GameCog(commands.Cog):
                         count += 1
                     except:
                         pass
-            await ctx.send(f"🧹 DM内のボットのメッセージを {count} 件削除しました。", delete_after=5)
+            await ctx.send(embed=discord.Embed(description=f"🧹 DM内のボットのメッセージを {count} 件削除しました。", color=discord.Color.blue()), delete_after=5)
 
     @commands.command(name="game_stop")
     @commands.guild_only()
@@ -120,30 +120,30 @@ class GameCog(commands.Cog):
         """現在進行中のゲームを強制終了し、チャンネルとデータを削除します"""
         game = get_game(ctx.guild.id)
         if not game.is_playing:
-            return await ctx.send("⚠️ 現在進行中のゲームはありません。")
+            return await ctx.send(embed=discord.Embed(description="⚠️ 現在進行中のゲームはありません。", color=discord.Color.orange()))
 
         # 権限チェック：主催者または管理者のみ
         is_admin = ctx.author.guild_permissions.administrator
         is_host = (game.host and ctx.author.id == game.host.id)
         if not (is_admin or is_host):
-            return await ctx.send("❌ ゲームを強制終了できるのは、主催者または管理者のみです。", delete_after=5)
+            return await ctx.send(embed=discord.Embed(description="❌ ゲームを強制終了できるのは、主催者または管理者のみです。", color=discord.Color.red()), delete_after=5)
 
-        await ctx.send("🛑 ゲームを強制終了します。リソースを解放しています...")
+        await ctx.send(embed=discord.Embed(description="🛑 ゲームを強制終了します。リソースを解放しています...", color=discord.Color.dark_red()))
         await self.force_stop_game(ctx.channel)
 
     @msgdel.error
     async def msgdel_error(self, ctx, error):
         """msgdelコマンド専用のエラーハンドリング"""
         if isinstance(error, commands.NoPrivateMessage):
-            await ctx.send("❌ このコマンドはサーバー内でのみ使用できます。", delete_after=5)
+            await ctx.send(embed=discord.Embed(description="❌ このコマンドはサーバー内でのみ使用できます。", color=discord.Color.red()), delete_after=5)
         elif isinstance(error, commands.MissingRequiredArgument):
-            await ctx.send("❌ 削除する件数を指定してください。例: !msgdel 10", delete_after=5)
+            await ctx.send(embed=discord.Embed(description="❌ 削除する件数を指定してください。例: !msgdel 10", color=discord.Color.orange()), delete_after=5)
         elif isinstance(error, commands.MissingPermissions):
-            await ctx.send("❌ あなたには「メッセージの管理」権限がないため、このコマンドは実行できません。", delete_after=5)
+            await ctx.send(embed=discord.Embed(description="❌ あなたには「メッセージの管理」権限がないため、このコマンドは実行できません。", color=discord.Color.red()), delete_after=5)
         elif isinstance(error, commands.BadArgument):
-            await ctx.send("❌ 削除する件数は数字で指定してください。例: !msgdel 10", delete_after=5)
+            await ctx.send(embed=discord.Embed(description="❌ 削除する件数は数字で指定してください。例: !msgdel 10", color=discord.Color.orange()), delete_after=5)
         else:
-            await ctx.send(f"❌ 予期せぬエラーが発生しました: {error}", delete_after=5)
+            await ctx.send(embed=discord.Embed(description=f"❌ 予期せぬエラーが発生しました: {error}", color=discord.Color.red()), delete_after=5)
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
@@ -168,6 +168,13 @@ class GameCog(commands.Cog):
                         await member.edit(mute=True)
                     except:
                         pass
+        # 👻 死亡者が墓場VCにいる場合は、常に喋れるように（ミュートを自動解除）
+        elif game.is_playing and game.dead_vc and after.channel == game.dead_vc:
+            if after.mute:
+                try:
+                    await member.edit(mute=False)
+                except:
+                    pass
 
     # 分割したメソッドをバインド
     execute_game_start = execute_game_start

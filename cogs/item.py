@@ -34,7 +34,7 @@ class WillNoteModal(discord.ui.Modal):
         game.player_items[interaction.user.id] = "📝 遺言ノート"
         game.will_notes[interaction.user.id] = self.content.value
         if guild: await game.save_state(guild) # 保存
-        await interaction.response.send_message("✅ 遺言を書き残しました。人狼に殺害された場合のみ公開されます。", ephemeral=True)
+        await interaction.response.send_message(embed=discord.Embed(description="✅ 遺言を書き残しました。人狼に殺害された場合のみ公開されます。", color=discord.Color.green()), ephemeral=True)
 
 # 📢 拡声器をDMから直接使うためのView
 class MegaphoneUseView(discord.ui.View):
@@ -48,9 +48,9 @@ class MegaphoneUseView(discord.ui.View):
         game = get_game(self.guild_id)
         
         if game.player_items.get(user.id) != "📢 拡声器":
-            return await interaction.response.send_message("使用可能な拡声器を持っていません。", ephemeral=True)
+            return await interaction.response.send_message(embed=discord.Embed(description="❌ 使用可能な拡声器を持っていません。", color=discord.Color.red()), ephemeral=True)
         if not game.is_playing:
-            return await interaction.response.send_message("ゲーム中のみ使用可能です。", ephemeral=True)
+            return await interaction.response.send_message(embed=discord.Embed(description="⚠️ ゲーム中のみ使用可能です。", color=discord.Color.orange()), ephemeral=True)
 
         use_player_item(self.guild_id, user.id)
         feedback_embed = discord.Embed(description="📢 **拡声器を使用しました！**\n全体チャンネルにアナウンスを送信しました。", color=discord.Color.red())
@@ -81,16 +81,16 @@ class MirrorSelect(discord.ui.Select):
         game = get_game(self.guild_id)
         guild = interaction.client.get_guild(self.guild_id)
         if game.player_items.get(user.id) != "🪞 姿写しの鏡":
-            return await interaction.response.send_message("使用可能な鏡を持っていません。", ephemeral=True)
+            return await interaction.response.send_message(embed=discord.Embed(description="❌ 使用可能な鏡を持っていません。", color=discord.Color.red()), ephemeral=True)
 
         target_id = int(self.values[0])
         target_member = guild.get_member(target_id) if guild else None
         if target_member is None:
-            return await interaction.response.send_message("対象のプレイヤーが見つかりません。", ephemeral=True)
+            return await interaction.response.send_message(embed=discord.Embed(description="❌ 対象のプレイヤーが見つかりません。", color=discord.Color.red()), ephemeral=True)
 
         # ターゲットが現在も生存しているかチェック
         if target_member not in game.alive_players:
-            return await interaction.response.send_message("そのプレイヤーは既に生存していないため、覗き見ることはできません。", ephemeral=True)
+            return await interaction.response.send_message(embed=discord.Embed(description="⚠️ そのプレイヤーは既に生存していないため、覗き見ることはできません。", color=discord.Color.orange()), ephemeral=True)
 
         use_player_item(self.guild_id, user.id)
         target_role = game.roles.get(target_member)
@@ -122,7 +122,7 @@ class ItemDrawView(discord.ui.View):
         guild = interaction.client.get_guild(self.guild_id)
         
         if user.id in game.player_items:
-            return await interaction.response.send_message("今夜の準備はすでに完了しています。", ephemeral=True)
+            return await interaction.response.send_message(embed=discord.Embed(description="⚠️ 今夜の準備はすでに完了しています。", color=discord.Color.orange()), ephemeral=True)
         
         # ボタン無効化で二重取得を防止
         button.disabled = True
@@ -198,7 +198,7 @@ class QuickItemView(discord.ui.View):
         
         game = get_game(self.guild_id)
         if interaction.user not in game.alive_players:
-            return await interaction.response.send_message("👻 幽霊は荷物を受け取れません...", ephemeral=True)
+            return await interaction.response.send_message(embed=discord.Embed(description="👻 幽霊は荷物を受け取れません...", color=discord.Color.dark_grey()), ephemeral=True)
 
         self.taken = True
         self.stop()

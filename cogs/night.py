@@ -38,10 +38,10 @@ async def start_night(self: 'GameCog', channel: discord.TextChannel) -> None:
     # 人狼と霊界のスレッドに通知ありでメッセージを送る
     if game.wolf_thread:
         embed = discord.Embed(title=f"🌙 第{game.day_count}夜：作戦会議", description="襲撃先を相談してください。", color=discord.Color.dark_magenta())
-        await game.wolf_thread.send(embed=embed, silent=False)
+        await game.wolf_thread.send(embed=embed, silent=True)
     if game.dead_thread:
         embed = discord.Embed(title=f"🌙 第{game.day_count}夜：観戦", description="生存者たちの行動を見守りましょう。", color=discord.Color.dark_blue())
-        await game.dead_thread.send(embed=embed, silent=False)
+        await game.dead_thread.send(embed=embed, silent=True)
 
     if game.log_channel:
         await game.log_channel.send(embed=discord.Embed(description="🌙 夜フェーズを開始しました。", color=discord.Color.blue()))
@@ -247,7 +247,7 @@ async def process_night_results(self: 'GameCog', channel: discord.TextChannel) -
         embed = discord.Embed(title="☀️ 朝の結果発表", color=discord.Color.red())
         # 霊界のスレッドには先に通知を送って準備させる
         if game.dead_thread:
-            await game.dead_thread.send(embed=discord.Embed(title="☀️ 朝の結果発表", description="犠牲者を確認してください。", color=discord.Color.red()), silent=False)
+            await game.dead_thread.send(embed=discord.Embed(title="☀️ 朝の結果発表", description="犠牲者を確認してください。", color=discord.Color.red()), silent=True)
 
         names = []
         for p in dead_list:
@@ -278,7 +278,7 @@ async def process_night_results(self: 'GameCog', channel: discord.TextChannel) -
         embed.description = "🛡️ 昨夜は誰も犠牲になりませんでした。"
         await target_channel.send(embed=embed, silent=True)
         if game.dead_thread:
-            await game.dead_thread.send(embed=discord.Embed(description="☀️ 昨夜は誰も犠牲になりませんでした。", color=discord.Color.green()), silent=False)
+            await game.dead_thread.send(embed=discord.Embed(description="☀️ 昨夜は誰も犠牲になりませんでした。", color=discord.Color.green()), silent=True)
 
         if game.log_channel:
             await game.log_channel.send(embed=discord.Embed(description="🛡️ 犠牲者は出ませんでした。", color=discord.Color.green()))

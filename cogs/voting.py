@@ -180,6 +180,11 @@ async def start_voting(self: 'GameCog', channel: discord.TextChannel) -> None:
     if game.log_channel:
         await game.log_channel.send(embed=discord.Embed(description="🗳️ 投票フェーズに入りました。", color=discord.Color.gold()))
     
+    # ⚠️ 安全策：生存者がいない場合は投票をスキップして終了チェックへ
+    if not game.alive_players:
+        await self.check_game_over(channel)
+        return
+
     view = discord.ui.View(timeout=60)
     select_options = [discord.SelectOption(label=p.display_name, value=str(p.id)) for p in game.alive_players]
 

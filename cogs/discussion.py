@@ -25,10 +25,10 @@ class DiscussionView(discord.ui.View):
         if not guild or not isinstance(user, discord.Member): return
         game = get_game(guild.id)
         if user not in game.alive_players:
-            return await interaction.response.send_message("生存者のみ可能です。", ephemeral=True)
+            return await interaction.response.send_message(embed=discord.Embed(description="❌ 生存者のみ可能です。", color=discord.Color.red()), ephemeral=True)
         
         if self.extended:
-            return await interaction.response.send_message("⚠️ 延長は1回までです。", ephemeral=True)
+            return await interaction.response.send_message(embed=discord.Embed(description="⚠️ 延長は1回までです。", color=discord.Color.orange()), ephemeral=True)
 
         self.extend_players.add(user.id)
         alive_count = len(game.alive_players)
@@ -71,7 +71,7 @@ class DiscussionView(discord.ui.View):
         game = get_game(interaction.guild.id)
         
         if not guild or not isinstance(user, discord.Member) or user not in game.alive_players:
-            return await interaction.response.send_message("生存者のみ可能です。", ephemeral=True)
+            return await interaction.response.send_message(embed=discord.Embed(description="❌ 生存者のみ可能です。", color=discord.Color.red()), ephemeral=True)
         
         user_id = user.id
         self.ready_players.add(user_id)
@@ -166,7 +166,7 @@ async def start_discussion(self: 'GameCog', channel: discord.TextChannel) -> Non
 
     # 霊界のスレッドに議論開始を通知
     if game.dead_thread:
-        await game.dead_thread.send(embed=discord.Embed(title="💬 昼の議論開始", description="生存者の推理を聞いてみましょう。", color=discord.Color.light_grey()), silent=False)
+        await game.dead_thread.send(embed=discord.Embed(title="💬 昼の議論開始", description="生存者の推理を聞いてみましょう。", color=discord.Color.light_grey()), silent=True)
     
     if game.log_channel:
         await game.log_channel.send(embed=discord.Embed(description="💬 昼の議論フェーズに入りました。", color=discord.Color.light_grey()))

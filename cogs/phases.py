@@ -64,7 +64,8 @@ async def execute_game_start(self: 'GameCog', channel: discord.TextChannel) -> N
     werewolves = [p for p, r in game.roles.items() if r.name == RoleName.WOLF]
     for p, role in game.roles.items():
         try:
-            msg = f"🔮 あなたの役職は 【**{role.name}**】 (陣営: {role.team}) です。"
+            role_reveal_embed = discord.Embed(title="🔮 あなたの役職通知", color=discord.Color.purple())
+            role_reveal_embed.description = f"あなたの役職は 【**{role.name}**】 です。\n(陣営: {role.team})"
             is_wolf = (role.name == RoleName.WOLF)
             
             # ゲーム開始DMを送信
@@ -79,8 +80,8 @@ async def execute_game_start(self: 'GameCog', channel: discord.TextChannel) -> N
             # 人狼同士の確認
             if role.name == RoleName.WOLF and len(werewolves) > 1:
                 partners = [w.display_name for w in werewolves if w != p]
-                msg += f"\n🐺 仲間の人狼: {', '.join(partners)}"
-            dm_msg = await p.send(msg, silent=not is_wolf)
+                role_reveal_embed.add_field(name="🐺 仲間の人狼", value=", ".join(partners), inline=False)
+            dm_msg = await p.send(embed=role_reveal_embed, silent=not is_wolf)
             game.add_dm_message(p.id, dm_msg.id)
         except Exception as e:
             err_msg = f"⚠️ {p.mention} への役職通知DM送信に失敗しました。設定を確認してください。"
@@ -121,7 +122,7 @@ async def execute_game_start(self: 'GameCog', channel: discord.TextChannel) -> N
     start_embed.set_footer(text="※プレイヤーは生存者ボイスチャンネルに移動してください。\n夜フェーズに入ると、DMで行動を促されます。")
     
     await channel.send(embed=start_embed, silent=True)
-    await game.log_channel.send("─── ゲームログの記録を開始しました ───", silent=True)
+    await game.log_channel.send(embed=discord.Embed(description="📊 **ゲームログの記録を開始しました**", color=discord.Color.blue()), silent=True)
 
     # 🔊 プレイヤーがボイスチャンネルに移動する猶予（20秒）を与える。
     # 既にどこかのVCにいる人はボットが自動で移動させる。
@@ -241,8 +242,8 @@ async def check_game_over(self: 'GameCog', channel: discord.TextChannel) -> bool
 
         await result_destination.send(embed=embed, file=file, silent=True)
 
-        await game.log_channel.send(f"🏁 ゲームが終了しました。結果: {victory_message}", silent=True)
-        await game.log_channel.send("─── ゲームログの記録を終了しました ───", silent=True)
+        await game.log_channel.send(embed=discord.Embed(description=f"🏁 **ゲームが終了しました。結果: {victory_message}**", color=discord.Color.gold()), silent=True)
+        await game.log_channel.send(embed=discord.Embed(description="📊 **ゲームログの記録を終了しました**", color=discord.Color.blue()), silent=True)
 
         game.reset_state()
         return True

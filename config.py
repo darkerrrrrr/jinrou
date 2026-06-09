@@ -153,9 +153,12 @@ class WerewolfGame:
         Returns:
             Optional[str]: 勝利した陣営の文字列、まだ勝利条件が満たされていない場合はNone
         """
-        if not self.is_playing or len(self.alive_players) == 0: 
+        if not self.is_playing:
             return None
         
+        if len(self.alive_players) == 0:
+            return "全員死亡（引き分け）"
+
         # 生存している役職名をリスト化
         alive_roles = [getattr(self.roles[p], "name", "") for p in self.alive_players if p in self.roles]
         

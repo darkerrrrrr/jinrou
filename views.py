@@ -37,29 +37,29 @@ class RecruitView(discord.ui.View):
     async def settings(self, interaction: discord.Interaction, button: discord.ui.Button):
         game = get_game(interaction.guild.id)
         if not game.host or interaction.user.id != game.host.id: 
-            return await interaction.response.send_message("主催者のみ可能です。", ephemeral=True)
+            return await interaction.response.send_message(embed=discord.Embed(description="❌ 主催者のみ可能です。", color=discord.Color.red()), ephemeral=True)
         await interaction.response.send_modal(TimeSettingModal(parent_view=self))
 
     @discord.ui.button(label="👥 役職設定", style=discord.ButtonStyle.primary, custom_id="roles_btn")
     async def role_settings(self, interaction: discord.Interaction, button: discord.ui.Button):
         game = get_game(interaction.guild.id)
         if not game.host or interaction.user.id != game.host.id: 
-            return await interaction.response.send_message("主催者のみ可能です。", ephemeral=True)
+            return await interaction.response.send_message(embed=discord.Embed(description="❌ 主催者のみ可能です。", color=discord.Color.red()), ephemeral=True)
         await interaction.response.send_message("役職変更:", view=RoleSettingView(interaction.guild.id), ephemeral=True)
 
     @discord.ui.button(label="▶ ゲーム開始", style=discord.ButtonStyle.blurple, custom_id="start_btn")
     async def start(self, interaction: discord.Interaction, button: discord.ui.Button):
         game = get_game(interaction.guild.id)
         if not game.host or interaction.user.id != game.host.id: 
-            return await interaction.response.send_message("主催者のみ可能です。", ephemeral=True)
+            return await interaction.response.send_message(embed=discord.Embed(description="❌ 主催者のみ可能です。", color=discord.Color.red()), ephemeral=True)
         # テストプレイ用に1人以上で開始可能に変更
-        if len(game.players) < 1: return await interaction.response.send_message("参加者がいないため開始できません。", ephemeral=True)
+        if len(game.players) < 1: return await interaction.response.send_message(embed=discord.Embed(description="⚠️ 参加者がいないため開始できません。", color=discord.Color.orange()), ephemeral=True)
         
         channel = interaction.channel
         if not isinstance(channel, (discord.TextChannel, discord.Thread)):
-            return await interaction.response.send_message("エラー: チャンネル情報を取得できませんでした。", ephemeral=True)
+            return await interaction.response.send_message(embed=discord.Embed(description="❌ エラー: チャンネル情報を取得できませんでした。", color=discord.Color.red()), ephemeral=True)
 
-        await interaction.response.send_message("ゲームを開始します！")
+        await interaction.response.send_message(embed=discord.Embed(description="🎮 **ゲームを開始します！**", color=discord.Color.green()))
         
         bot = cast(commands.Bot, interaction.client)
         cog = bot.get_cog("GameCog")
@@ -85,9 +85,9 @@ class TimeSettingModal(discord.ui.Modal):
             
             # バリデーション：正の数のみ許可
             if discussion_time <= 0 or night_time <= 0 or morning_time <= 0:
-                return await interaction.response.send_message("⚠️ 時間は1秒以上で設定してください。", ephemeral=True)
+                return await interaction.response.send_message(embed=discord.Embed(description="⚠️ 時間は1秒以上で設定してください。", color=discord.Color.orange()), ephemeral=True)
             if discussion_time > 3600 or night_time > 3600 or morning_time > 3600:
-                return await interaction.response.send_message("⚠️ 時間は3600秒以下で設定してください。", ephemeral=True)
+                return await interaction.response.send_message(embed=discord.Embed(description="⚠️ 時間は3600秒以下で設定してください。", color=discord.Color.orange()), ephemeral=True)
             
             game.discussion_time = discussion_time
             game.night_time = night_time
@@ -95,9 +95,9 @@ class TimeSettingModal(discord.ui.Modal):
             
             if game.recruit_message: 
                 await game.recruit_message.edit(embed=self.parent_view.create_recruit_embed(interaction.guild.id), view=self.parent_view)
-            await interaction.response.send_message("✅ 更新しました。", ephemeral=True)
+            await interaction.response.send_message(embed=discord.Embed(description="✅ ゲーム時間を更新しました。", color=discord.Color.green()), ephemeral=True)
         except ValueError:
-            await interaction.response.send_message("⚠️ 時間は数字で入力してください。", ephemeral=True)
+            await interaction.response.send_message(embed=discord.Embed(description="⚠️ 時間は数字で入力してください。", color=discord.Color.red()), ephemeral=True)
 
 class RoleCountSelect(discord.ui.Select):
     def __init__(self, guild_id: int, selected_role: RoleLiteral):
