@@ -34,6 +34,9 @@ class GameCog(commands.Cog):
     @commands.has_permissions(manage_guild=True)
     async def game_setup(self, ctx):
         game = get_game(ctx.guild.id)
+        if game.is_playing:
+            return await ctx.send(embed=discord.Embed(description="⚠️ ゲームが既に進行中です。新しく開始するには `!game_stop` で終了させてください。", color=discord.Color.orange()), delete_after=10)
+
         game.reset_state()
         game.text_channel = ctx.channel
         game.host = ctx.author

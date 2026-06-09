@@ -30,6 +30,18 @@ async def execute_game_start(self: 'GameCog', channel: discord.TextChannel) -> N
         channel: メインチャンネル
     """
     game = get_game(channel.guild.id)
+
+    # 🚀 重複起動を完全に防止
+    if game.is_playing:
+        return
+
+    # 🚀 ゲーム開始を宣言し、募集メッセージのボタンを「即座に」消す
+    game.is_playing = True
+    if game.recruit_message:
+        try:
+            await game.recruit_message.edit(view=None)
+        except: pass
+
     role_map = {
         RoleName.WOLF: Werewolf, 
         RoleName.SEER: Seer, 
@@ -92,19 +104,13 @@ async def execute_game_start(self: 'GameCog', channel: discord.TextChannel) -> N
     # ゲームチャンネルを生成
     await channels.create_game_channels(channel.guild)
     await channels.setup_wolf_permissions(channel.guild)
-    
-    # 🚀 ゲームが始まったので、募集メッセージのボタンを消して「あとから推せない」ようにする
-    if game.recruit_message:
-        try:
-            await game.recruit_message.edit(view=None)
-        except: pass
 
-    game.is_playing = True
+    target_channel = game.progress_channel or channel
     game.alive_players = game.players.copy()
     game.thief_action_done = False
     
     # アイテム(拡声器など)が発動したときに全体通知を送るチャンネルを記憶
-    game.text_channel = channel 
+    game.text_channel = target_channel
     game.silenced_players.clear() # ミュートプレイヤーリストの初期化
     game.confused_players.clear() # 混乱プレイヤーリストの初期化
     
@@ -124,14 +130,14 @@ async def execute_game_start(self: 'GameCog', channel: discord.TextChannel) -> N
     await channel.send(embed=start_embed, silent=True)
     await game.log_channel.send(embed=discord.Embed(description="📊 **ゲームログの記録を開始しました**", color=discord.Color.blue()), silent=True)
 
-    # 🔊 プレイヤーがボイスチャンネルに移動する猶予（20秒）を与える。
-    # 既にどこかのVCにいる人はボットが自動で移動させる。
+    # 🔊 ボイスチャンネル移動の案内は「元チャンネル」と「新チャンネル」の両方に送る
     wait_embed = discord.Embed(
         title="🔊 ボイスチャンネル移動",
-        description="⏳ 20秒後にゲームを開始します。どこかのボイスチャンネルに入っているプレイヤーは自動的に移動させます。\n未入室の方は **🔊生存者村** へ入ってください。",
+        description="⏳ 20秒後にゲームを開始します。未入室の方は **🔊生存者村** へ入ってください。",
         color=discord.Color.blue()
     )
     await channel.send(embed=wait_embed, silent=True, delete_after=20)
+    await target_channel.send(embed=wait_embed, silent=True)
 
     # 他のボイスチャンネルにいるプレイヤーを「🔊生存者村」へ強制移動させる
     vc_missing = []
@@ -156,7 +162,7 @@ async def execute_game_start(self: 'GameCog', channel: discord.TextChannel) -> N
         description="村に朝が来ました。現在、生存者は全員無事です。\n\nまもなく夜が訪れます。役職者の方は夜の行動に備えてください。",
         color=discord.Color.orange()
     )
-    await channel.send(embed=opening_embed, silent=True)
+    await target_channel.send(embed=opening_embed, silent=True)
     await asyncio.sleep(5) # 状況を確認する短い猶予
 
     await game.save_state(channel.guild)
