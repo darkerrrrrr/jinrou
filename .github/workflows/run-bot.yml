@@ -14,9 +14,9 @@ jobs:
   run-bot:
     runs-on: ubuntu-latest
     
-    # 前のジョブが残っている場合にキャンセルしない設定に変更します。
-    # これにより、コードを Push した際に対戦中の Bot が突然死ぬのを防ぎます。
-    # ※GitHub Actions の仕様上、最大 6時間でジョブ自体は終了します。
+    # cancel-in-progress を false にすることで、新しいプッシュがあっても
+    # 実行中のボットを即座に殺さないようにします。
+    # ただし、多重起動（同じトークンでのログイン）には注意が必要です。
     concurrency:
       group: werewolf-bot-group
       cancel-in-progress: false
