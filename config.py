@@ -57,7 +57,7 @@ class WerewolfGame:
         self.text_channel: Optional[discord.TextChannel] = None
 
         self.discussion_time: int = 150
-        self.day_count: int = 1
+        self.day_count: int = 0
         self.event_log: List[str] = []
         self.night_time: int = 60
         self.morning_time: int = 15
@@ -243,7 +243,7 @@ class WerewolfGame:
         }
 
         self.is_playing = data.get("is_playing", False)
-        self.day_count = data.get("day_count", 1)
+        self.day_count = data.get("day_count", 0)
         self.role_settings = data.get("role_settings", self.role_settings)
         self.event_log = data.get("event_log", [])
         self.vc_locked = data.get("vc_locked", False)

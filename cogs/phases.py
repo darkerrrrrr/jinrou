@@ -162,7 +162,6 @@ async def check_game_over(self: 'GameCog', channel: discord.TextChannel) -> bool
     if victory_message:
         game.is_playing = False
         game.vc_locked = False
-        await _cleanup_resources(game, channel.guild)
 
         # 🏆 ランキングの更新
         winner_team = ""
@@ -248,6 +247,9 @@ async def check_game_over(self: 'GameCog', channel: discord.TextChannel) -> bool
 
         await game.log_channel.send(embed=discord.Embed(description=f"🏁 **ゲームが終了しました。結果: {victory_message}**", color=discord.Color.gold()), silent=True)
         await game.log_channel.send(embed=discord.Embed(description="📊 **ゲームログの記録を終了しました**", color=discord.Color.blue()), silent=True)
+
+        # 全てのアナウンスが終わった後にリソースを削除
+        await _cleanup_resources(game, channel.guild)
 
         game.reset_state()
         return True
