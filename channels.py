@@ -59,9 +59,8 @@ async def create_game_channels(guild: discord.Guild) -> Optional[discord.Categor
     # 🐺人狼用ナレーションスレッドの作成
     wolf_starter = await game.wolf_channel.send("📢 **人狼ナレーション専用スレッド**\nここでは進行上のアナウンスのみが行われます。")
     game.wolf_thread = await wolf_starter.create_thread(name="🐺人狼用ナレーション")
-    # プレイヤーがスレッドに書き込めないように設定
-    for p in game.players:
-        await game.wolf_thread.set_permissions(p, send_messages=False)
+    # スレッドをロックして、ボット以外書き込めないようにする
+    await game.wolf_thread.edit(locked=True)
     
     # 2. ゲームログと生存者ボイス（これらは全員が見えたり入れたりしてOK）
     # ゲームログは進行中に秘密が漏れないよう、全員非表示にする
@@ -84,9 +83,8 @@ async def create_game_channels(guild: discord.Guild) -> Optional[discord.Categor
     # 👻霊界用ナレーションスレッドの作成
     dead_starter = await game.dead_channel.send("📢 **霊界ナレーション専用スレッド**\nここでは進行上のアナウンスのみが行われます。")
     game.dead_thread = await dead_starter.create_thread(name="👻霊界用ナレーション")
-    # プレイヤーがスレッドに書き込めないように設定
-    for p in game.players:
-        await game.dead_thread.set_permissions(p, send_messages=False)
+    # スレッドをロックして、ボット以外書き込めないようにする
+    await game.dead_thread.edit(locked=True)
 
     game.dead_vc = await guild.create_voice_channel("👻墓場・霊界", category=category, overwrites=dead_overwrites)
     
