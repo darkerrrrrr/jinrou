@@ -17,7 +17,7 @@ jobs:
     # 前のジョブが残っている場合は、自動で新しい方に切り替える（多重起動の防止）
     concurrency:
       group: werewolf-bot-group
-      cancel-in-progress: true
+      cancel-in-progress: false
 
     steps:
     - name: コードのチェックアウト
