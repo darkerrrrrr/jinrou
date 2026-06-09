@@ -68,6 +68,19 @@ async def start_night(self: 'GameCog', channel: discord.TextChannel) -> None:
         
         label = role.get_action_label()
         if label:
+            # 初夜（第0夜）は襲撃・殺害を制限する
+            if game.day_count == 0 and label in ["襲撃", "殺害"]:
+                # 行動を「スキップ」として登録し、全員完了判定を回す
+                game.actions[player] = {"action": "skipped", "target": None, "is_critical": False}
+                game.check_night_actions_complete()
+                try:
+                    msg_text = "初日の夜（第0夜）は襲撃を行えません。仲間との相談に集中しましょう。" if label == "襲撃" else "初日の夜（第0夜）は殺害を行えません。明日以降に備えましょう。"
+                    info_embed = discord.Embed(title=f"🌙 第0夜：{role.name}", description=msg_text, color=discord.Color.blue())
+                    dm_msg = await player.send(embed=info_embed, silent=True)
+                    game.add_dm_message(player.id, dm_msg.id)
+                except: pass
+                continue
+
             is_wolf = (role.name == RoleName.WOLF)
             try:
                 view = ActionView(player, label, channel.guild.id, timeout=game.night_time)
@@ -244,10 +257,10 @@ async def process_night_results(self: 'GameCog', channel: discord.TextChannel) -
     # 【死亡者発表】
     if dead_list:
         await asyncio.sleep(2) # 犠牲者がいる場合のみタメを作る
-        embed = discord.Embed(title="☀️ 朝の結果発表", color=discord.Color.red())
+        embed = discord.Embed(title=f"☀️ {game.day_count}日目：朝の結果発表", color=discord.Color.red())
         # 霊界のスレッドには先に通知を送って準備させる
         if game.dead_thread:
-            await game.dead_thread.send(embed=discord.Embed(title="☀️ 朝の結果発表", description="犠牲者を確認してください。", color=discord.Color.red()), silent=True)
+            await game.dead_thread.send(embed=discord.Embed(title=f"☀️ {game.day_count}日目：朝の結果発表", description="犠牲者を確認してください。", color=discord.Color.red()), silent=True)
 
         names = []
         for p in dead_list:
@@ -274,11 +287,11 @@ async def process_night_results(self: 'GameCog', channel: discord.TextChannel) -
                 await target_channel.send(embed=will_embed, silent=True)
                 use_player_item(channel.guild.id, player_id)
     else:
-        embed = discord.Embed(title="☀️ 朝の結果発表", color=discord.Color.green())
+        embed = discord.Embed(title=f"☀️ {game.day_count}日目：朝の結果発表", color=discord.Color.green())
         embed.description = "🛡️ 昨夜は誰も犠牲になりませんでした。"
         await target_channel.send(embed=embed, silent=True)
         if game.dead_thread:
-            await game.dead_thread.send(embed=discord.Embed(description="☀️ 昨夜は誰も犠牲になりませんでした。", color=discord.Color.green()), silent=True)
+            await game.dead_thread.send(embed=discord.Embed(description=f"☀️ {game.day_count}日目：朝は平穏でした。", color=discord.Color.green()), silent=True)
 
         if game.log_channel:
             await game.log_channel.send(embed=discord.Embed(description="🛡️ 犠牲者は出ませんでした。", color=discord.Color.green()))

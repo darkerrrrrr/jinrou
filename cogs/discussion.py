@@ -162,7 +162,7 @@ async def start_discussion(self: 'GameCog', channel: discord.TextChannel) -> Non
     end_timestamp = int(time.time() + game.discussion_time)
     
     disc_embed = discord.Embed(
-        title="💬 昼の議論開始",
+        title=f"💬 {game.day_count}日目：昼の議論開始",
         description=f"議論終了まで： <t:{end_timestamp}:R>\n生存者の皆さんは話し合ってください！",
         color=discord.Color.light_grey()
     )
@@ -170,7 +170,7 @@ async def start_discussion(self: 'GameCog', channel: discord.TextChannel) -> Non
 
     # 霊界のスレッドに議論開始を通知
     if game.dead_thread:
-        await game.dead_thread.send(embed=discord.Embed(title="💬 昼の議論開始", description="生存者の推理を聞いてみましょう。", color=discord.Color.light_grey()), silent=True)
+        await game.dead_thread.send(embed=discord.Embed(title=f"💬 {game.day_count}日目：昼の議論開始", description="生存者の推理を聞いてみましょう。", color=discord.Color.light_grey()), silent=True)
     
     if game.log_channel:
         await game.log_channel.send(embed=discord.Embed(description="💬 昼の議論フェーズに入りました。", color=discord.Color.light_grey()))

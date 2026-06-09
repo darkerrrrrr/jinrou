@@ -121,7 +121,7 @@ class WerewolfGame:
         self.banned_voters.clear()
         self.night_skip_event.clear()
         self.role_dm_messages.clear()
-        self.day_count = 1
+        self.day_count = 0
         self.event_log.clear()
         self.last_protected.clear()
 
@@ -204,7 +204,8 @@ class WerewolfGame:
             "banned_voters": list(self.banned_voters),
             "last_protected": self.last_protected,
             "role_dm_messages": self.role_dm_messages,
-            "thief_action_done": self.thief_action_done
+            "thief_action_done": self.thief_action_done,
+            "last_executed": self.last_executed.id if self.last_executed else None
         }
 
     async def save_state(self, guild: discord.Guild):
@@ -280,6 +281,10 @@ class WerewolfGame:
         self.last_protected = {int(k): v for k, v in data.get("last_protected", {}).items()}
         self.role_dm_messages = {int(k): v for k, v in data.get("role_dm_messages", {}).items()} # vはリストとして復元される
         self.thief_action_done = data.get("thief_action_done", False)
+        
+        last_executed_id = data.get("last_executed")
+        if last_executed_id:
+            self.last_executed = guild.get_member(last_executed_id)
 
 _guild_games: Dict[int, WerewolfGame] = {}
 
